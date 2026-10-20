@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                                     
                                                                                                     
                                                                                                     
- L diff running                                                                                     
+ L Git diff complete; Esc closes output                                                             
 --- style
 AAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 DDDDEDFFFGHHHHIFFFFIGIGJJJJJJGKIGIGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
@@ -67,77 +67,64 @@ L fg=#ebf4ff bg=#266eba attrs=b---------
 M fg=#dae5f0 bg=#14304c attrs=----------
 --- viewer before leave
 # yew pty golden v1
-size 100x24 alt=1 cursor=0,0 vis=0
+size 100x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
-fussrepo · trunk        │ 1 main.c  +                                                               
- + docs ✗               │    1 int main(void) { return 0; }                                         
- - src ↑ ✗              │    1 ┌ *git-view*─────────────────────────────────┐                       
-     both.c ↑ ✗         │      │diff --git a/src/modified.c b/src/modified.c│                       
-     main.c             │      │index 8c75c7b..d57506a 100644               │                       
-     modified.c ✗       │      │--- a/src/modified.c                        │                       
-     staged.c ↑         │      │+++ b/src/modified.c                        │                       
-   README.md            │      │@@ -1 +1 @@                                 │                       
-   untracked.txt ✗      │      │-base modified                              │                       
-                        │      │+modified change                            │                       
-                        │      │                                            │                       
-                        │      └────────────────────────────────────────────┘                       
-                        │                                                                           
-                        │                                                                           
-                        │                                                                           
-                        │                                                                           
-                        │                                                                           
-                        │                                                                           
-                        │                                                                           
-                        │                                                                           
-                        │                                                                           
-                        │                                                                           
-                        │diff running                                                               
-                        │type jump · Alt+key actions · C-S-/ list · Esc leave                       
+ 1 main.c  2 *git diff*  +                                                                          
+    1 diff --git a/src/modified.c b/src/modified.c                                                  
+    1 index 8c75c7b..d57506a 100644                                                                 
+    2 --- a/src/modified.c                                                                          
+    3 +++ b/src/modified.c                                                                          
+    4 @@ -1 +1 @@                                                                                   
+    5 -base modified                                                                                
+    6 +modified change                                                                              
+    7                                                                                               
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ L Git diff complete; Esc closes output                                                             
 --- style
-AAAAAAAABBBAAAAABBBBBBBBCDDDDDDDDDDEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-BBBBBBBGGBBBBBBBBBBBBBBBCHHHHIHJJJKLLLLMJJJJMKMKNNNNNNKOMKMKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBPPGGBBBBBBBBBBBBBBCHHHHHHQQRRRRRRRRRRQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBPPGGBBBBBBBBBCHHHHHHQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-SSSSSSSSSSSSSSSTTSSSSSSSCHHHHHHQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBPPBBBBBBBBBCHHHHHHQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBFFBBBBBBCHHHHHHQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBCUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU
-BBBBBBBBBBBBBBBBBBBBBBBBCUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU
+AAAAAAAAAABBBBBBBBBBBBBBCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+DDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+GGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
 --- legend
-A fg=#c8ccd4 bg=#1b202a attrs=b---------
-B fg=#c8ccd4 bg=#1b202a attrs=----------
-C fg=#ffffff bg=#1b202a attrs=b---------
-D fg=#c8ccd4 bg=#2c313a attrs=b---------
-E fg=#61afef bg=#1b202a attrs=b---------
-F fg=#5c6370 bg=#1b202a attrs=----------
-G fg=#e06c75 bg=#1b202a attrs=----------
-H fg=#4b5263 bg=#12141a attrs=-d--------
-I fg=#c8ccd4 bg=#12141a attrs=bd--------
-J fg=#e5c07b bg=#12141a attrs=-di-------
-K fg=#c8ccd4 bg=#12141a attrs=-d--------
-L fg=#61afef bg=#12141a attrs=-d--------
-M fg=#9aa0aa bg=#12141a attrs=-d--------
-N fg=#c678dd bg=#12141a attrs=bd--------
-O fg=#d19a66 bg=#12141a attrs=-d--------
-P fg=#98c379 bg=#1b202a attrs=----------
-Q fg=#5c6370 bg=default attrs=----------
-R fg=#5c6370 bg=default attrs=b---------
-S fg=#c8ccd4 bg=#1b202a attrs=------r---
-T fg=#e06c75 bg=#1b202a attrs=------r---
-U fg=#faebf8 bg=#b13d9b attrs=----------
+A fg=#5c6370 bg=#1b202a attrs=----------
+B fg=#c8ccd4 bg=#2c313a attrs=b---------
+C fg=#61afef bg=#1b202a attrs=b---------
+D fg=#4b5263 bg=#12141a attrs=----------
+E fg=#c8ccd4 bg=#12141a attrs=b---------
+F fg=#c8ccd4 bg=#12141a attrs=----------
+G fg=#ebf4ff bg=#266eba attrs=b---------
+H fg=#dae5f0 bg=#14304c attrs=----------

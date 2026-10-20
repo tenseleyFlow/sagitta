@@ -715,6 +715,12 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
             pending->req.stdin_len = req->stdin_len;
         }
         pending->req.owner = req->owner;
+        if (req->editor_env != NULL)
+            pending->req.editor_env = arena_strdup(&pending->req.arena,
+                                                    req->editor_env);
+        if (req->sequence_env != NULL)
+            pending->req.sequence_env = arena_strdup(&pending->req.arena,
+                                                      req->sequence_env);
     } else {
         pending->req.kind = YEW_GREQ_VERB;
     }
@@ -728,7 +734,7 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
     pending->active = true;
     ctx->inflight++;
     final_argv = git_build_argv(verb, argv);
-    git_env_build(NULL, NULL,
+    git_env_build(pending->req.editor_env, pending->req.sequence_env,
                   pending->req.literal_paths || git_takes_paths(verb),
                   env_set);
     if (test_spawn != NULL) {
@@ -741,7 +747,10 @@ u32 yew_git_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
         spec.sink = YEW_SINK_CALLBACK;
         spec.in_bytes = pending->req.stdin_bytes;
         spec.in_len = pending->req.stdin_len;
-        spec.timeout_ms = verb->timeout_ms;
+        /* Human editing time is paused by the bridge, not charged to Git.
+         * Running hooks/replay still have a finite subprocess budget. */
+        spec.timeout_ms = pending->req.editor_env == NULL ? verb->timeout_ms :
+                                                           YEW_GIT_NET_TIMEOUT_MS;
         spec.display = verb->name;
         spec.internal = true;
         spec.collect_max = YEW_GIT_COLLECT_MAX;

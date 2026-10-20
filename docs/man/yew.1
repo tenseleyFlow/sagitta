@@ -810,8 +810,20 @@ to filter a range,
 to read output, and
 .B :!!command
 to hand the real terminal to a foreground child.
-Shell output is a dismissible view and never overwrites the active buffer;
-Escape retires that view and returns to the file.
+Shell output opens a named read-only temporary tab, never replacing a
+document pane. Escape, :q, and ordinary tab-close dismiss the view and return
+to its originating tab. The job continues after its view closes; :jobs can
+reopen the output.
+.SS "Git input and output"
+FUSS input-taking actions use centered modals. Enter accepts a single-line
+prompt; in commit messages and rebase todo/message edits it inserts a newline.
+Ctrl-S accepts either form. Escape cancels without accepting the typed text.
+Failed commits retain their drafts and open a separate error-output tab.
+Interactive rebase uses Git's todo and message files through an asynchronous
+editor bridge instead of starting a nested terminal editor. Cancelling a
+rebase editor step does not silently discard a partial rebase; use
+git.rebase.continue or git.rebase.abort after inspecting its state.
+Git output tabs close like shell-output tabs and restore FUSS on return.
 .SH "REGULAR EXPRESSIONS"
 yew's engine is a Thompson NFA/DFA hybrid with leftmost-first semantics and
 a linear-time design.

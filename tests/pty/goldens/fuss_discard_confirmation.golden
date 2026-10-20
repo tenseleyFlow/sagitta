@@ -1,5 +1,5 @@
 # yew pty golden v1
-size 120x24 alt=1 cursor=0,0 vis=0
+size 120x24 alt=1 cursor=11,30 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
 fussrepo · trunk             │ 1 main.c  +                                                                              
@@ -10,7 +10,13 @@ fussrepo · trunk             │ 1 main.c  +
      modified.c ✗            │                                                                                          
      staged.c ↑              │                                                                                          
    README.md                 │                                                                                          
-   untracked.txt ✗           │                                                                                          
+   untracked.txt ✗          ┌─Discard changes──────────────────────────────────────────────┐                            
+                            │ discard src/modified.c — type 'discard' to confirm           │                            
+                            │ use hunk discard for an undoable version                     │                            
+                            │                                                              │                            
+                            │                                                              │                            
+                            │ Enter / Ctrl-S accept | Esc cancel                           │                            
+                            └──────────────────────────────────────────────────────────────┘                            
                              │                                                                                          
                              │                                                                                          
                              │                                                                                          
@@ -18,14 +24,8 @@ fussrepo · trunk             │ 1 main.c  +
                              │                                                                                          
                              │                                                                                          
                              │                                                                                          
-                             │                                                                                          
-                             │                                                                                          
-                             │                                                                                          
-                             │                                                                                          
-                             │                                                                                          
-                             │                                                                                          
-discard src/modified.c — type 'discard' to confirm — use hunk discard for an undoable version                           
-                             │:                                                                                         
+                             │Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict                         
+                             │type jump · Alt+key actions · C-S-/ list · Esc leave                                      
 --- style
 AAAAAAAABBBAAAAABBBBBBBBBBBBBCDDDDDDDDDDEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 BBBBBBBGGBBBBBBBBBBBBBBBBBBBBCHHHHIHJJJKLLLLMJJJJMKMKNNNNNNKOMKMKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
@@ -35,7 +35,13 @@ BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 QQQQQQQQQQQQQQQRRQQQQQQQQQQQQCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 BBBBBBBBBBBBBPPBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBFFBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+BBBBBBBBBBBBBBBBFFBBBBBBBBBBSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBSTSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSTTTTTTTTTTTSKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBSTSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSTTTTTTTTTTTTTTTTTTTTTSKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBSTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTSKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBSTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTSKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBSTSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSTTTTTTTTTTTTTTTTTTTTTTTTTTTSKKKKKKKKKKKKKKKKKKKKKKKKKKKK
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
@@ -43,14 +49,8 @@ BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCHHHHHHKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
-SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCTUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBCUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUU
 --- legend
 A fg=#c8ccd4 bg=#1b202a attrs=b---------
 B fg=#c8ccd4 bg=#1b202a attrs=----------
@@ -70,9 +70,9 @@ O fg=#d19a66 bg=#12141a attrs=-d--------
 P fg=#98c379 bg=#1b202a attrs=----------
 Q fg=#c8ccd4 bg=#1b202a attrs=------r---
 R fg=#e06c75 bg=#1b202a attrs=------r---
-S fg=idx:214 bg=#4e2a0f attrs=b---------
-T fg=#2f1806 bg=#e77d24 attrs=b---------
-U fg=#f7e0cc bg=#4e2a0f attrs=b---------
+S fg=#2f1806 bg=#e77d24 attrs=b---------
+T fg=#f7e0cc bg=#4e2a0f attrs=b---------
+U fg=#faebf8 bg=#b13d9b attrs=----------
 --- sgr
 \x1b[0;1;38;2;200;204;212;48;2;44;49;58m
 \x1b[38;2;97;175;239;48;2;27;32;42m
@@ -390,6 +390,21 @@ U fg=#f7e0cc bg=#4e2a0f attrs=b---------
 \x1b[38;2;200;204;212m
 \x1b[1;27;38;2;250;235;248;48;2;177;61;155m
 \x1b[22m
-\x1b[0;1;38;5;214;48;2;78;42;15m
+\x1b[0;1;38;2;47;24;6;48;2;231;125;36m
+\x1b[38;2;247;224;204;48;2;78;42;15m
 \x1b[38;2;47;24;6;48;2;231;125;36m
 \x1b[38;2;247;224;204;48;2;78;42;15m
+\x1b[38;2;47;24;6;48;2;231;125;36m
+\x1b[38;2;247;224;204;48;2;78;42;15m
+\x1b[38;2;47;24;6;48;2;231;125;36m
+\x1b[38;2;247;224;204;48;2;78;42;15m
+\x1b[38;2;47;24;6;48;2;231;125;36m
+\x1b[38;2;247;224;204;48;2;78;42;15m
+\x1b[38;2;47;24;6;48;2;231;125;36m
+\x1b[38;2;247;224;204;48;2;78;42;15m
+\x1b[38;2;47;24;6;48;2;231;125;36m
+\x1b[38;2;247;224;204;48;2;78;42;15m
+\x1b[38;2;47;24;6;48;2;231;125;36m
+\x1b[38;2;247;224;204;48;2;78;42;15m
+\x1b[38;2;47;24;6;48;2;231;125;36m
+\x1b[22;38;2;250;235;248;48;2;177;61;155m

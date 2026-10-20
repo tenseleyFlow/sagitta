@@ -10,6 +10,9 @@
 #include "mod/lsp/lsp.h"
 #include "mod/ai/ai.h"
 #include "mod/mods.h"
+#if YEW_WITH_FUSS
+#include "mod/git/modal.h"
+#endif
 #include "mod/plug/pkg.h"
 #include "mod/plug/plug.h"
 #include "syn/defs.h"
@@ -187,6 +190,10 @@ int main(int argc, char **argv)
     int exit_code;
 
     yew_job_set_argv0(argc > 0 ? argv[0] : NULL);
+#if YEW_WITH_FUSS
+    if (argc >= 2 && strcmp(argv[1], "--yew-git-editor") == 0)
+        return yew_git_modal_helper_main(argc, argv);
+#endif
 
     /* Sprint 57.27: the shell session's env record (shsession.h).  Not an
      * option: nothing but the session's frame line runs it. */

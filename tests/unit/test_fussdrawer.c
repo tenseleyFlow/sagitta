@@ -864,7 +864,8 @@ void test_fussdrawer_commit_owner_tab_close_cancels_cleanly(void)
     cx.count = 1U;
     cx.source = YEW_SRC_TEST;
     YEW_ASSERT_EQ_I64(yew_fuss_cmd_commit(&cx), YEW_CMD_OK);
-    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_E);
+    YEW_ASSERT(ed.cmdline.modal);
     YEW_ASSERT(yew_tab_close(&ed, owner));
     YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_F);
     YEW_ASSERT(yew_fuss_active(&ed));
@@ -909,7 +910,8 @@ void test_fussdrawer_commit_owner_pane_close_cancels_cleanly(void)
     snap->gen++;
     cx.win = ed.win;
     YEW_ASSERT_EQ_I64(yew_fuss_cmd_commit(&cx), YEW_CMD_OK);
-    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_E);
+    YEW_ASSERT(ed.cmdline.modal);
     commit_win_id = ed.win->id;
     cx.win = ed.win;
     YEW_ASSERT_EQ_I64(yew_pane_cmd_close(&cx), YEW_CMD_OK);
@@ -923,9 +925,10 @@ void test_fussdrawer_commit_owner_pane_close_cancels_cleanly(void)
     /* A fresh commit must not be poisoned by stale deferred state. */
     cx.win = ed.win;
     YEW_ASSERT_EQ_I64(yew_fuss_cmd_commit(&cx), YEW_CMD_OK);
-    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
-    YEW_ASSERT_NOT_NULL(yew_ws_scratch_find(&ed, "*commit*"));
-    YEW_ASSERT_EQ_I64(yew_fuss_commit_close(&ed, ed.win->buf, &handled),
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_E);
+    YEW_ASSERT(ed.cmdline.modal);
+    YEW_ASSERT_NULL(yew_ws_scratch_find(&ed, "*commit*"));
+    YEW_ASSERT_EQ_I64(yew_fuss_commit_close(&ed, yew_cmdline_target(&ed)->buf, &handled),
                       YEW_CMD_OK);
     YEW_ASSERT(handled);
     YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_F);

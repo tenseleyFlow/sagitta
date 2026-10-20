@@ -4912,7 +4912,7 @@ static void case_s57_12_job_output_quit_returns(PtyCtx *c)
         return;
     s19_run_until(c, "!printf 'job output\\n'", "[exit 0 in");
     s19_send_command(c, "q");
-    s19_wait_screen(c, "job output hidden; :jobs to reopen");
+    s19_wait_screen(c, "command output remains in :jobs");
     ptc_settle(c, 100);
     ptc_check(c, s19_screen_contains(&c->vt, "document"),
               ":q from job output did not restore the document");
@@ -11054,11 +11054,15 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
               "opening the FUSS diff viewer exited yew");
     ptc_check(c, s52_screen_contains(&c->vt, "modified change"),
               "FUSS diff viewer did not render the dirty-file result");
-    ptc_check(c, s52_screen_contains(&c->vt, "both.c"),
-              "FUSS diff viewer replaced the tree instead of splitting");
+    ptc_check(c, s52_screen_contains(&c->vt, "*git diff*"),
+              "FUSS diff result did not get its own titled tab");
     if (c->failed)
         goto done;
     snapshot_write(&c->vt, &viewer);
+    ptc_keys(c, "esc");
+    s52_wait_screen(c, "both.c");
+    ptc_check(c, !s52_screen_contains(&c->vt, "diff --git"),
+              "Escape did not dismiss the temporary diff tab");
     ptc_keys(c, "esc");
     ptc_wait_until(c, s52_screen_contains_visible_cursor,
                    "int main(void)",
@@ -11090,6 +11094,54 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
 done:
     bytebuf_free(&viewer);
     free(original_cells);
+}
+
+static void case_s59_5_fuss_commit_modal(PtyCtx *c)
+{
+    VtCell *original = calloc((size_t)c->vt.rows * c->vt.cols,
+                              sizeof(*original));
+
+    if (original == NULL) {
+        ptc_check(c, false, "allocating original document snapshot");
+        return;
+    }
+    if (s52_open(c, original)) {
+        ptc_keys(c, "alt+m");
+        s52_wait_screen(c, "Commit message");
+        ptc_bytes(c, "modal subject");
+        ptc_keys(c, "enter");
+        ptc_bytes(c, "body text");
+        s52_wait_screen(c, "body text");
+        ptc_check(c, s52_screen_contains_visible_cursor(c, "body text"),
+                  "commit modal hid its editing cursor behind FUSS");
+        ptc_check(c, s52_screen_contains(&c->vt, "modal subject"),
+                  "commit modal did not preserve the first line");
+        c->vt.sync_pairs_unstable = true;
+        ptc_snapshot(c, c->test->name);
+        ptc_keys(c, "esc");
+        s52_wait_screen_gone(c, "Commit message", 240U);
+        ptc_keys(c, "ctrl+shift+/");
+        s52_wait_screen(c, "FUSS actions");
+        s52_type_filter(c, "A-m");
+        /* Filtering is case-insensitive: A-M (amend) sorts before A-m. */
+        ptc_keys(c, "down");
+        ptc_keys(c, "enter");
+        s52_wait_screen(c, "Commit message");
+        ptc_bytes(c, "picker draft");
+        s52_wait_screen(c, "picker draft");
+        ptc_check(c, s52_screen_contains_visible_cursor(c, "picker draft"),
+                  "action picker stole the commit modal's input focus");
+        ptc_keys(c, "esc");
+        s52_wait_screen_gone(c, "Commit message", 240U);
+        ptc_keys(c, "esc");
+        ptc_wait_until(c, s52_screen_contains_visible_cursor,
+                       "int main(void)", "commit cancel did not restore document");
+        ptc_check(c, memcmp(original, c->vt.cells,
+                  (size_t)(c->vt.rows - 1U) * c->vt.cols * sizeof(*original)) == 0,
+                  "commit modal changed the originating document view");
+        force_quit(c);
+    }
+    free(original);
 }
 
 static void case_s52_fuss_loading(PtyCtx *c)
@@ -12667,6 +12719,8 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_actions_palette, modern, 24U, 100U, case_s52_fuss),
     C(fuss_diff_viewer_restores_layout, modern, 24U, 100U,
       case_s52_fuss_diff_viewer),
+    C(s59_5_fuss_commit_modal, modern, 24U, 100U,
+      case_s59_5_fuss_commit_modal),
     C(fuss_loading_first_frame, modern, 24U, 80U,
       case_s52_fuss_loading),
     C(fuss_discard_confirmation, modern, 24U, 120U,

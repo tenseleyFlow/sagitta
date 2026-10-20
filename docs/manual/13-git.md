@@ -30,13 +30,44 @@ unstage, and discard target the captured selected path. Directory actions
 apply to the selected subtree. An unknown or vanished path disables actions
 instead of applying them to a newly selected row.
 
-Commit opens the editor on Git's message file using the normal buffer and
-save path. Abort, save failure, or child failure restores editor and terminal
-state. yew never invents a commit message and never bypasses hooks.
+Commit (`Alt-m`) opens a centered **Commit message** modal.
+Enter inserts a newline; Ctrl-S submits; Escape cancels without running a
+commit. Amend uses the previous message. Arrow movement, Shift selection,
+undo and Ctrl-C/X/V edit the modal's private text, never the document behind
+it. Empty messages abort. Existing Git comment-character cleanup remains in
+effect. yew never invents messages or bypasses hooks. A rejected commit keeps
+the draft open for correction; its complete error is in a separate output tab.
+
+Branch creation, stash messages, tags, rename, and confirmations use the same
+modal surface. Enter submits single-line prompts. For an annotated tag, put
+the tag name on the first line and its annotation on subsequent lines, then
+press Ctrl-S. Hard reset from the picker and rebase abort require explicit
+confirmation. Escape cancels even after the confirmation word has been typed.
+Long help text wraps; Page Up/Down reveals additional details.
+
+## Interactive rebase
+
+Choose a base, review the range in its temporary tab, and confirm `rebase`.
+The **Interactive rebase todo** modal contains Git's actual todo list; edit
+and reorder its lines with the usual `pick`, `reword`, `edit`, `squash`,
+`fixup`, and `drop` commands, then Ctrl-S. Subsequent message edits use the
+same modal. Git runs asynchronously and never starts a nested terminal editor.
+Human editing time does not consume the Git subprocess timeout.
+
+Escape fails the current Git editor step. A partially replayed rebase is not
+silently discarded: inspect the output and repository state, then use
+`git.rebase.continue` or `git.rebase.abort` from FUSS as appropriate. Abort
+asks for `abort` before returning to the original branch. The bridge accepts
+text files smaller than 1 MiB; unreadable, binary, or oversized editor requests fail
+explicitly. Authentication continues to use configured Git credential agents;
+terminal authentication prompts are disabled and failures appear as output.
 
 ## Diff, gutter, and blame
 
-Diff views are read-only editor buffers with intraline spans. Gutter signs
+FUSS diff/log/status and command results open named, read-only temporary tabs.
+Escape, `:q`, or normal tab-close dismisses the view and resumes FUSS without
+changing the original document. Standard document diff views retain their
+intraline spans. Gutter signs
 come from cached hunks and share the fixed priority stack with diagnostics and
 other signs. Alt-Up/Down walks hunks from document modes. Blame is requested
 asynchronously and cached by file identity/revision; stale results cannot

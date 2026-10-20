@@ -186,6 +186,8 @@ static Key live_key(u8 byte)
         key.code = text;
         key.ntext = 1U;
         key.text[0] = text;
+        if ((byte & 0x80U) != 0U)
+            key.mods = YEW_MOD_ALT;
     } else {
         key.code = (u32)'r';
         key.mods = YEW_MOD_CTRL;
@@ -303,10 +305,26 @@ static bool check_live_fuss(const u8 *data, size_t len, char *why,
         (void)snprintf(why, why_cap, "could not enter live F mode");
         return false;
     }
+    if (len != 0U && (data[0] & 3U) == 0U) {
+        CmdCtx cx = {0};
+
+        cx.ed = &ed;
+        cx.win = ed.win;
+        cx.source = YEW_SRC_TEST;
+        (void)yew_fuss_cmd_commit(&cx);
+    }
     for (at = 0U; at < count; at++) {
         Key key = live_key(data[at]);
 
         yew_ed_handle_key(&ed, key, 1000 + (i64)at * 17);
+        if (ed.cmdline.active && ed.cmdline.modal) {
+            if (ed.win->buf != &ed.buffer || yew_textbuf_len(ed.buffer.tb) != 0U) {
+                (void)snprintf(why, why_cap, "modal edited the source document");
+                yew_git_test_spawn_set(NULL, NULL);
+                yew_ed_free(&ed);
+                return false;
+            }
+        }
         yew_fuss_tick(&ed, 1000 + (i64)at * 17);
         if (ed.jobs.len != 0U) {
             (void)snprintf(why, why_cap,

@@ -27,6 +27,10 @@ struct GitReq {
     char *detect_root;
     u64 detect_env_fp;
     void *owner;
+    /* Only the native modal bridge supplies these complete NAME=value
+     * rows. Jobs copy them before returning from spawn. */
+    const char *editor_env;
+    const char *sequence_env;
 };
 
 typedef u32 (*GitTestSpawnFn)(Ed *ed, const GitVerb *verb,

@@ -649,7 +649,7 @@ static void test_f13_filename_matrix_roundtrips_every_git_surface(
 
         CHECK(enter_fuss(repo, &ed));
         CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
-        commit = ed.win == NULL ? NULL : ed.win->buf;
+        commit = yew_cmdline_target(&ed)->buf;
         CHECK(commit != NULL && commit->tb != NULL);
         if (commit != NULL && commit->tb != NULL) {
             yew_textbuf_delete(commit->tb,
@@ -908,8 +908,7 @@ static bool open_amend_editor(const char *repo, Ed *ed)
         !run_jobs_idle(ed))
         return false;
     yew_fuss_tick(ed, yew_now_ms());
-    return ed->win != NULL && ed->win->buf != NULL &&
-           strcmp(ed->win->buf->name, "*commit*") == 0;
+    return ed->cmdline.active && ed->cmdline.modal && ed->mode == YEW_MODE_E;
 }
 
 static void test_read_views_use_expected_git_argv(const char *parent)
@@ -1239,11 +1238,9 @@ static void test_commit_template_uses_auto_comment_char(const char *parent)
     snap = yew_git_snapshot(&ed);
     CHECK(snap != NULL && strcmp(snap->comment_char, "auto") == 0);
     CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
-    CHECK(buffer_bytes(ed.win == NULL ? NULL : ed.win->buf, &text));
-    CHECK(bytes_contains(&text, (const u8 *)"# Please enter the commit message",
-                         sizeof("# Please enter the commit message") - 1U));
-    CHECK(bytes_contains(&text, (const u8 *)"# Changes to be committed:",
-                         sizeof("# Changes to be committed:") - 1U));
+    CHECK(buffer_bytes(yew_cmdline_target(&ed)->buf, &text));
+    CHECK(text.len == 0U);
+    CHECK(ed.cmdline.modal && strstr(ed.cmdline.modal_help, "1 staged") != NULL);
     bytes_drop(&text);
     yew_ed_free(&ed);
 }
@@ -1264,11 +1261,9 @@ static void test_commit_template_uses_custom_comment_char(const char *parent)
     snap = yew_git_snapshot(&ed);
     CHECK(snap != NULL && strcmp(snap->comment_char, ";") == 0);
     CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
-    CHECK(buffer_bytes(ed.win == NULL ? NULL : ed.win->buf, &text));
-    CHECK(bytes_contains(&text, (const u8 *)"; Please enter the commit message",
-                         sizeof("; Please enter the commit message") - 1U));
-    CHECK(!bytes_contains(&text, (const u8 *)"# Please enter the commit message",
-                          sizeof("# Please enter the commit message") - 1U));
+    CHECK(buffer_bytes(yew_cmdline_target(&ed)->buf, &text));
+    CHECK(text.len == 0U);
+    CHECK(ed.cmdline.modal && strcmp(ed.cmdline.modal_title, "Commit message") == 0);
     bytes_drop(&text);
     yew_ed_free(&ed);
 }
@@ -1328,7 +1323,7 @@ static void test_amend_prefills_previous_message(const char *parent)
     CHECK(child_repo_path(parent, "commit-amend-prefill", repo,
                           sizeof(repo)));
     CHECK(open_amend_editor(repo, &ed));
-    CHECK(buffer_bytes(ed.win == NULL ? NULL : ed.win->buf, &text));
+    CHECK(buffer_bytes(yew_cmdline_target(&ed)->buf, &text));
     CHECK(text.len >= sizeof("base\n") - 1U &&
           memcmp(text.data, "base\n", sizeof("base\n") - 1U) == 0);
     bytes_drop(&text);
@@ -1346,7 +1341,7 @@ static void test_cleared_amend_message_does_not_spawn_git(const char *parent)
 
     CHECK(child_repo_path(parent, "commit-amend-empty", repo, sizeof(repo)));
     CHECK(open_amend_editor(repo, &ed));
-    commit = ed.win == NULL ? NULL : ed.win->buf;
+    commit = yew_cmdline_target(&ed)->buf;
     ec = yew_ed_edit_ctx_buffer(&ed, commit);
     CHECK(ec.tb != NULL &&
           yew_edit_delete(&ec, (Span){0U, yew_textbuf_len(ec.tb)}));
@@ -1375,7 +1370,7 @@ static void test_empty_commit_message_does_not_spawn_git(const char *repo)
     CHECK(yew_mode_enter(&ed, YEW_MODE_F) == YEW_CMD_OK);
     CHECK(run_jobs_idle(&ed));
     CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
-    commit = ed.win == NULL ? NULL : ed.win->buf;
+    commit = yew_cmdline_target(&ed)->buf;
     capture.repo = repo;
     yew_git_test_spawn_set(capture_and_run, &capture);
     CHECK(yew_fuss_commit_save(&ed, commit, &handled) == YEW_CMD_ERR_STATE);
@@ -1407,7 +1402,7 @@ static void test_commit_and_amend_save_change_head(const char *parent)
     CHECK(run_git(repo, add, NULL, &code) && code == 0);
     CHECK(enter_fuss(repo, &ed));
     CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
-    commit = ed.win == NULL ? NULL : ed.win->buf;
+    commit = yew_cmdline_target(&ed)->buf;
     CHECK(commit != NULL && commit->tb != NULL);
     if (commit != NULL && commit->tb != NULL) {
         yew_textbuf_delete(commit->tb,
@@ -1432,7 +1427,7 @@ static void test_commit_and_amend_save_change_head(const char *parent)
     yew_ed_free(&ed);
 
     CHECK(open_amend_editor(repo, &ed));
-    commit = ed.win == NULL ? NULL : ed.win->buf;
+    commit = yew_cmdline_target(&ed)->buf;
     CHECK(commit != NULL && commit->tb != NULL);
     if (commit != NULL && commit->tb != NULL) {
         yew_textbuf_delete(commit->tb,
@@ -1516,6 +1511,11 @@ static void test_confirmed_discard_delete_and_rename(const char *parent)
     CHECK(invoke(&ed, "ed.git.discard", "base.txt", 8U) == YEW_CMD_OK);
     capture.repo = repo;
     yew_git_test_spawn_set(capture_and_run, &capture);
+    /* Even a fully typed confirmation is inert when dismissed by Escape. */
+    yew_cmdline_paste(&ed, (const u8 *)"discard", 7U);
+    yew_cmdline_close(&ed, false);
+    CHECK(capture.calls == 0U);
+    CHECK(invoke(&ed, "ed.git.discard", "base.txt", 8U) == YEW_CMD_OK);
     CHECK(submit_prompt(&ed, "discard", false));
     yew_git_test_spawn_set(NULL, NULL);
     CHECK(capture.calls == 1U && capture.exit_code == 0);
@@ -1554,6 +1554,313 @@ static void test_confirmed_discard_delete_and_rename(const char *parent)
     yew_ed_free(&ed);
 }
 
+static bool pump_git_modal(Ed *ed, const char *title)
+{
+    i64 start = yew_now_ms();
+
+    do {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        yew_job_collect_fds(ed, pfd, &n);
+        (void)poll(pfd, (nfds_t)n, 10);
+        yew_job_pump(ed, pfd, n);
+        yew_job_reap(ed);
+        yew_job_tick(ed, yew_now_ms());
+        yew_job_settle(ed);
+        yew_fuss_tick(ed, yew_now_ms());
+        if (title != NULL && ed->cmdline.active && ed->cmdline.modal &&
+            strcmp(ed->cmdline.modal_title, title) == 0)
+            return true;
+        if (title == NULL && ed->jobs.len == 0U && !ed->cmdline.active)
+            return true;
+    } while (yew_now_ms() - start < 10000);
+    (void)fprintf(stderr, "modal wait failed: wanted %s; got %s; %s\n",
+        title == NULL ? "idle" : title,
+        ed->cmdline.modal_title == NULL ? "none" : ed->cmdline.modal_title,
+        ed->msg.text);
+    return false;
+}
+
+static bool rebase_begin_for_base(Ed *ed, const char *base)
+{
+    CmdCtx cx = {0};
+
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.sarg = base;
+    cx.sarg_len = (u32)strlen(base);
+    cx.source = YEW_SRC_TEST;
+    if (yew_fuss_cmd_rebase_interactive(&cx) != YEW_CMD_OK ||
+        !pump_git_modal(ed, "Interactive rebase"))
+        return false;
+    if (!submit_prompt(ed, "rebase", true))
+        return false;
+    return pump_git_modal(ed, "Interactive rebase todo");
+}
+
+static bool rebase_begin_modal(Ed *ed)
+{
+    return rebase_begin_for_base(ed, "HEAD~2");
+}
+
+static void test_rebase_modals_reword_and_cancel(const char *parent)
+{
+    char repo[4096];
+    char *add[] = {(char *)"add", (char *)".", NULL};
+    char *commit[] = {(char *)"commit", (char *)"-qm", (char *)"second", NULL};
+    char *log[] = {(char *)"log", (char *)"-2", (char *)"--format=%s", NULL};
+    char *head[] = {(char *)"rev-parse", (char *)"HEAD", NULL};
+    Bytes before = {0};
+    Bytes after = {0};
+    Bytes todo = {0};
+    Ed ed;
+    int code = -1;
+    Buffer *origin;
+
+    CHECK(child_repo_path(parent, "rebase-modal", repo, sizeof(repo)));
+    CHECK(write_repo_file(repo, "second.txt", "second\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+    commit[2] = (char *)"third";
+    CHECK(write_repo_file(repo, "third.txt", "third\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+    CHECK(enter_fuss(repo, &ed));
+    origin = ed.win->buf;
+    if (!rebase_begin_modal(&ed)) {
+        CHECK(false);
+        yew_ed_free(&ed);
+        return;
+    }
+    CHECK(buffer_bytes(yew_cmdline_target(&ed)->buf, &todo));
+    CHECK(todo.len > 5U && memcmp(todo.data, "pick ", 5U) == 0);
+    /* Editing the sequence does not touch the originating document. */
+    CHECK(yew_textbuf_len(origin->tb) == 0U);
+    yew_textbuf_delete(ed.cmdline.buf, (Span){0U, 4U});
+    yew_textbuf_insert(ed.cmdline.buf, BYTEOFF(0U), (const u8 *)"reword", 6U);
+    yew_cmdline_close(&ed, true);
+    if (pump_git_modal(&ed, "Git commit message")) {
+        CHECK(submit_prompt(&ed, "second rewritten\n\nbody survives", true));
+        CHECK(pump_git_modal(&ed, NULL));
+        CHECK(run_git(repo, log, &after, &code) && code == 0);
+        CHECK(bytes_contains(&after, (const u8 *)"second rewritten", 16U));
+        CHECK(bytes_contains(&after, (const u8 *)"third", 5U));
+    } else {
+        CHECK(false);
+    }
+    bytes_drop(&after);
+    bytes_drop(&todo);
+    yew_ed_free(&ed);
+
+    CHECK(run_git(repo, head, &before, &code) && code == 0);
+    CHECK(enter_fuss(repo, &ed));
+    if (rebase_begin_modal(&ed)) {
+        Key escape = {0};
+        size_t large_len = 1024U * 1024U;
+        char *large = malloc(large_len + 1U);
+
+        CHECK(large != NULL);
+        if (large != NULL) {
+            (void)memset(large, 'x', large_len);
+            large[large_len] = '\0';
+            CHECK(submit_prompt(&ed, large, true));
+            CHECK(ed.cmdline.modal);
+            CHECK(strstr(ed.cmdline.modal_help, "Draft retained") != NULL);
+            CHECK(yew_textbuf_len(ed.cmdline.buf) == large_len);
+            free(large);
+        }
+        escape.kind = YEW_EV_KEY;
+        escape.ev = YEW_KEY_PRESS;
+        escape.code = YEW_KEY_ESCAPE;
+        yew_ed_handle_key(&ed, escape, yew_now_ms());
+        CHECK(!ed.cmdline.active);
+        CHECK(pump_git_modal(&ed, NULL));
+        CHECK(run_git(repo, head, &after, &code) && code == 0);
+        CHECK(before.len == after.len &&
+              memcmp(before.data, after.data, before.len) == 0);
+    } else {
+        CHECK(false);
+    }
+    bytes_drop(&before);
+    bytes_drop(&after);
+    yew_ed_free(&ed);
+}
+
+static void test_commit_modal_retries_failed_hook(const char *parent)
+{
+    char repo[4096];
+    char hook[4096];
+    char *add[] = {(char *)"add", (char *)".", NULL};
+    char *log[] = {(char *)"log", (char *)"-1", (char *)"--format=%B", NULL};
+    Bytes draft = {0};
+    Bytes message = {0};
+    Ed ed;
+    Buffer *origin;
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "commit-retry", repo, sizeof(repo)));
+    CHECK(write_repo_file(repo, "second.txt", "second\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(write_repo_file(repo, ".git/hooks/pre-commit",
+                          "#!/bin/sh\nprintf 'hook rejected test commit\\n' >&2\nexit 1\n"));
+    CHECK(snprintf(hook, sizeof(hook), "%s/.git/hooks/pre-commit", repo) > 0);
+    CHECK(chmod(hook, 0700) == 0);
+    CHECK(enter_fuss(repo, &ed));
+    origin = ed.win->buf;
+    CHECK(invoke(&ed, "ed.git.commit", NULL, 0U) == YEW_CMD_OK);
+    CHECK(submit_prompt(&ed, "retained draft\n\nbody", true));
+    if (pump_git_modal(&ed, "Commit message")) {
+        CHECK(buffer_bytes(yew_cmdline_target(&ed)->buf, &draft));
+        CHECK(draft.len == 20U && memcmp(draft.data, "retained draft\n\nbody", 20U) == 0);
+        CHECK(ed.win->buf != origin && strstr(ed.win->buf->name, "failed") != NULL);
+        CHECK(yew_textbuf_len(origin->tb) == 0U);
+        CHECK(unlink(hook) == 0);
+        yew_cmdline_close(&ed, true);
+        CHECK(pump_git_modal(&ed, NULL));
+        CHECK(run_git(repo, log, &message, &code) && code == 0);
+        CHECK(bytes_contains(&message, (const u8 *)"retained draft\n\nbody", 20U));
+        CHECK(yew_textbuf_len(origin->tb) == 0U);
+    } else {
+        CHECK(false);
+    }
+    bytes_drop(&draft);
+    bytes_drop(&message);
+    yew_ed_free(&ed);
+}
+
+static void test_rebase_modal_squash_and_abort(const char *parent)
+{
+    char repo[4096];
+    char *add[] = {(char *)"add", (char *)".", NULL};
+    char *commit[] = {(char *)"commit", (char *)"-qm", (char *)"second", NULL};
+    char *head[] = {(char *)"rev-parse", (char *)"HEAD", NULL};
+    char *log[] = {(char *)"log", (char *)"-1", (char *)"--format=%s", NULL};
+    Bytes before = {0};
+    Bytes after = {0};
+    Bytes todo = {0};
+    Ed ed;
+    int code = -1;
+    size_t second;
+
+    CHECK(child_repo_path(parent, "rebase-squash", repo, sizeof(repo)));
+    CHECK(write_repo_file(repo, "second.txt", "second\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+    commit[2] = (char *)"third";
+    CHECK(write_repo_file(repo, "third.txt", "third\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+    CHECK(run_git(repo, head, &before, &code) && code == 0);
+    CHECK(enter_fuss(repo, &ed));
+    if (rebase_begin_modal(&ed)) {
+        /* Stop after replaying the first commit, then exercise abort from
+         * the live rebase state. No editor subprocess owns the terminal. */
+        yew_textbuf_delete(ed.cmdline.buf, (Span){0U, 4U});
+        yew_textbuf_insert(ed.cmdline.buf, BYTEOFF(0U), (const u8 *)"edit", 4U);
+        yew_cmdline_close(&ed, true);
+        CHECK(pump_git_modal(&ed, NULL));
+        CHECK(yew_mode_enter(&ed, YEW_MODE_F) == YEW_CMD_OK);
+        CHECK(invoke(&ed, "ed.git.rebase.abort", NULL, 0U) == YEW_CMD_OK);
+        CHECK(submit_prompt(&ed, "abort", true));
+        CHECK(pump_git_modal(&ed, NULL));
+        CHECK(run_git(repo, head, &after, &code) && code == 0);
+        CHECK(before.len == after.len && memcmp(before.data, after.data, before.len) == 0);
+    } else {
+        CHECK(false);
+    }
+    yew_ed_free(&ed);
+    bytes_drop(&before);
+    bytes_drop(&after);
+
+    CHECK(enter_fuss(repo, &ed));
+    if (rebase_begin_modal(&ed)) {
+        CHECK(buffer_bytes(yew_cmdline_target(&ed)->buf, &todo));
+        for (second = 0U; second < todo.len && todo.data[second] != (u8)'\n'; second++)
+            ;
+        second++;
+        CHECK(second + 4U < todo.len);
+        if (second + 4U < todo.len) {
+            yew_textbuf_delete(ed.cmdline.buf, (Span){second, second + 4U});
+            yew_textbuf_insert(ed.cmdline.buf, BYTEOFF(second), (const u8 *)"squash", 6U);
+            yew_cmdline_close(&ed, true);
+            if (pump_git_modal(&ed, "Git commit message")) {
+                CHECK(submit_prompt(&ed, "combined commit", true));
+                CHECK(pump_git_modal(&ed, NULL));
+                CHECK(run_git(repo, log, &after, &code) && code == 0);
+                CHECK(bytes_contains(&after, (const u8 *)"combined commit", 15U));
+            } else {
+                CHECK(false);
+            }
+        }
+    } else {
+        CHECK(false);
+    }
+    bytes_drop(&todo);
+    bytes_drop(&after);
+    yew_ed_free(&ed);
+}
+
+static void test_rebase_modal_conflict_continue(const char *parent)
+{
+    char repo[4096];
+    char *topic[] = {(char *)"switch", (char *)"-qc", (char *)"topic", NULL};
+    char *trunk[] = {(char *)"switch", (char *)"-q", (char *)"trunk", NULL};
+    char *back[] = {(char *)"switch", (char *)"-q", (char *)"topic", NULL};
+    char *commit[] = {(char *)"commit", (char *)"-qam", (char *)"topic change", NULL};
+    char *add[] = {(char *)"add", (char *)"base.txt", NULL};
+    char *log[] = {(char *)"log", (char *)"-1", (char *)"--format=%s", NULL};
+    char *conflicts[] = {(char *)"diff", (char *)"--name-only", (char *)"--diff-filter=U", NULL};
+    Bytes out = {0};
+    Ed ed;
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "rebase-conflict", repo, sizeof(repo)));
+    CHECK(run_git(repo, topic, NULL, &code) && code == 0);
+    CHECK(write_repo_file(repo, "base.txt", "topic\n"));
+    CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+    CHECK(run_git(repo, trunk, NULL, &code) && code == 0);
+    CHECK(write_repo_file(repo, "base.txt", "trunk\n"));
+    commit[2] = (char *)"trunk change";
+    CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+    CHECK(run_git(repo, back, NULL, &code) && code == 0);
+    CHECK(enter_fuss(repo, &ed));
+    if (!rebase_begin_for_base(&ed, "trunk")) {
+        CHECK(false);
+        yew_ed_free(&ed);
+        return;
+    }
+    yew_cmdline_close(&ed, true);
+    CHECK(pump_git_modal(&ed, NULL));
+    CHECK(run_git(repo, conflicts, &out, &code) && code == 0);
+    CHECK(bytes_contains(&out, (const u8 *)"base.txt", 8U));
+    bytes_drop(&out);
+    CHECK(write_repo_file(repo, "base.txt", "resolved\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(yew_mode_enter(&ed, YEW_MODE_F) == YEW_CMD_OK);
+    CHECK(invoke(&ed, "ed.git.rebase.continue", NULL, 0U) == YEW_CMD_OK);
+    if (pump_git_modal(&ed, "Git commit message")) {
+        /* Cancel only the message editor, retaining the in-progress rebase
+         * and staged resolution. A second continue can finish it. */
+        yew_cmdline_close(&ed, false);
+        CHECK(pump_git_modal(&ed, NULL));
+        CHECK(yew_mode_enter(&ed, YEW_MODE_F) == YEW_CMD_OK);
+        CHECK(invoke(&ed, "ed.git.rebase.continue", NULL, 0U) == YEW_CMD_OK);
+        if (pump_git_modal(&ed, "Git commit message")) {
+            CHECK(submit_prompt(&ed, "resolved topic", true));
+            CHECK(pump_git_modal(&ed, NULL));
+            CHECK(run_git(repo, log, &out, &code) && code == 0);
+            CHECK(bytes_contains(&out, (const u8 *)"resolved topic", 14U));
+        } else {
+            CHECK(false);
+        }
+    } else {
+        CHECK(false);
+    }
+    bytes_drop(&out);
+    yew_ed_free(&ed);
+}
+
 static void test_view_then_open_leaves_f_mode(const char *parent)
 {
     char repo[4096];
@@ -1576,6 +1883,9 @@ static void test_view_then_open_leaves_f_mode(const char *parent)
 int main(int argc, char **argv)
 {
     struct stat st;
+    const char *yew = getenv("YEW_TEST_YEW");
+
+    yew_job_set_argv0(yew == NULL ? "build/yew" : yew);
 
     if (argc != 2) {
         (void)fprintf(stderr, "usage: %s EMPTY_DIRECTORY\n", argv[0]);
@@ -1608,6 +1918,10 @@ int main(int argc, char **argv)
     test_amend_prefills_previous_message(argv[1]);
     test_cleared_amend_message_does_not_spawn_git(argv[1]);
     test_commit_and_amend_save_change_head(argv[1]);
+    test_rebase_modals_reword_and_cancel(argv[1]);
+    test_rebase_modal_squash_and_abort(argv[1]);
+    test_rebase_modal_conflict_continue(argv[1]);
+    test_commit_modal_retries_failed_hook(argv[1]);
     test_stash_pop_restores_worktree(argv[1]);
     test_confirmed_discard_delete_and_rename(argv[1]);
     test_view_then_open_leaves_f_mode(argv[1]);

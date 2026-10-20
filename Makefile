@@ -3897,14 +3897,14 @@ test-git-script: $(BUILD)/git_script tests/fixtures/git/mkrepo.sh \
 		LC_ALL=C $(BUILD)/git_script "$$tmp/repo"; \
 	fi
 
-test-fuss-commands: $(BUILD)/fuss_commands
+test-fuss-commands: $(BUILD)/fuss_commands $(BUILD)/yew
 	@if ! command -v git >/dev/null 2>&1; then \
 		echo 'HARNESS_SKIP fuss_commands: git not found'; \
 	else \
 		set -e; \
 		tmp=$$(mktemp -d); \
 		trap 'find "$$tmp" -depth -delete' EXIT HUP INT TERM; \
-		LC_ALL=C $(BUILD)/fuss_commands "$$tmp"; \
+		LC_ALL=C YEW_TEST_YEW="$(abspath $(BUILD)/yew)" $(BUILD)/fuss_commands "$$tmp"; \
 	fi
 
 test-git-hunks: $(BUILD)/git_hunks
