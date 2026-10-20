@@ -106,7 +106,7 @@ keyboard access, document bytes, cursor state and undo history.
    must not silently reset or discard the partial rebase. Explain that
    state and offer the existing continue/abort actions.
 
-5. **Help and evidence**, in `.docs/manual/`, `man/yew.1` and
+5. **Help and evidence**, in `docs/manual/`, `docs/man/yew.1` and
    `.docs/HANDOFF.md`. Update command-output dismissal and Git input
    instructions. Record exact test commands/results and remaining work;
    never report this overhaul complete while rebase remains on terminal
@@ -135,15 +135,30 @@ keyboard access, document bytes, cursor state and undo history.
 
 ## Definition of Done
 
-- [ ] `make -j2` is warning-clean under the repository C11 flags.
-- [ ] `:!` output and `:jobs` have real named tabs; no document pane swap.
-- [ ] Escape, `:q` and normal tab-close return safely from output views.
-- [ ] Closing output during a job leaves it running and recoverable.
-- [ ] Commit and amend are centered editable modals with no scratch swap.
-- [ ] Cancel/empty commit causes zero Git mutations; failures retain draft.
-- [ ] All FUSS input flows use modals with exact destructive-action help.
-- [ ] Git output and errors use independent read-only output tabs.
-- [ ] Interactive rebase sequence and message edits use the modal bridge.
-- [ ] Rebase cancel/conflict/continue/abort tests pass without hung helpers.
-- [ ] Focused unit, Git-script, PTY and sanitizer checks pass.
-- [ ] Help, handoff and evidence reflect shipped behavior and remaining work.
+- [x] `make -j2` is warning-clean under the repository C11 flags.
+- [x] `:!` output and `:jobs` have real named tabs; no document pane swap.
+- [x] Escape, `:q` and normal tab-close return safely from output views.
+- [x] Closing output during a job leaves it running and recoverable.
+- [x] Commit and amend are centered editable modals with no scratch swap.
+- [x] Cancel/empty commit causes zero Git mutations; failures retain draft.
+- [x] All FUSS input flows use modals with exact destructive-action help.
+- [x] Git output and errors use independent read-only output tabs.
+- [x] Interactive rebase sequence and message edits use the modal bridge.
+- [x] Rebase cancel/conflict/continue/abort tests pass without hung helpers.
+- [x] Focused unit, Git-script, PTY and sanitizer checks pass.
+- [x] Help, handoff and evidence reflect shipped behavior and remaining work.
+
+Local implementation checkpoint, 2026-10-20 (Apple-silicon macOS; unpushed):
+default and `MODULES=` builds pass. Full units: 3,051 tests, 73,852,198
+assertions, zero failures, two skips. The subsequently extended modal unit
+passes 49 assertions in normal and sanitizer builds. Real-Git script suite:
+642 assertions in normal and ASan/UBSan builds. Fifty selected FUSS/shell/
+output/self-open PTYs and nine context-menu PTYs pass (two overlap). Reviewed
+goldens cover the new tabs, centered commit modal/caret and destructive help.
+ASan/UBSan `job`, `cmdline`, `fuss`, `git`, `tab` unit filters pass. Bounded
+FUSS fuzz: seed 5905, 300 iterations, corpus 5, hash `2fbfa5bb38d353d5`, pass.
+Man/manual/docs-sync checks and selftests pass; optional groff lint is skipped
+because groff is unavailable. The sanitizer runtime requires
+`ASAN_OPTIONS=detect_leaks=0:abort_on_error=1`; this is not LSan evidence.
+No fresh Linux/GCC, hosted CI, Valgrind, performance/size gate or soak signoff
+is claimed here. See `.docs/HANDOFF.md` for the next pickup.

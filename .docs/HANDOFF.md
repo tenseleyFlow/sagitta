@@ -1,6 +1,6 @@
 # yew project handoff
 
-**Current checkpoint date:** 2026-10-14
+**Current checkpoint date:** 2026-10-20
 
 **Current source:** `/Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on
 Apple-silicon host `nomad-1`
@@ -10,7 +10,7 @@ Apple-silicon host `nomad-1`
 
 **Active branch:** `trunk`
 
-**Hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
+**Frozen-soak hosted-green product anchor:** `4c99e13474c84d75eec3250d61412b53fa41ae00`
 (GitHub Actions run `38176840903`: all 31 triggered jobs green)
 
 **F15 remediation baseline:** `0f38a8fc` contains all 144 completed finding
@@ -26,7 +26,61 @@ The product code used by the soak remains the exact hosted-green anchor.
 
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
-chapter 1.
+chapter 1. The user-requested Git interaction detour is Sprint 59.5 below.
+
+## Git workflow pickup — 2026-10-20
+
+Sprint 59.5 (`14-audits-release/s59_5-git-interaction.md`) implements the
+user's FUSS modal/output overhaul, explicitly including interactive rebase.
+It does not advance the numbered campaign or restart/change the frozen soak.
+Work began on clean `trunk` at `a254b505`; this session's changes are local
+commits, not pushed. No adjacent branch was merged or rewritten.
+
+- Commit/amend, branch/tag/stash/rename input and destructive confirmations
+  use a centered, bounded input modal with its own TextBuf/Win. Multiline
+  Enter inserts a newline, Ctrl-S accepts, Escape cancels; single-line
+  prompts also accept Enter. Unicode movement, Shift selection, undo and
+  clipboard commands stay in the modal. Long help scrolls with Page Up/Down.
+- Git stdout/stderr, diffs and ordinary `:!`/`:jobs` have named, read-only
+  temporary tabs. Escape, `:q` and normal tab-close dismiss them, restoring
+  a surviving origin by stable tab ID and resuming FUSS when appropriate.
+  Original document bytes, undo and split views are never borrowed. Closing
+  shell output leaves the job running/reopenable through `:jobs`.
+- Commit errors retain the draft and put diagnostics in an output tab.
+  Cancelling a typed destructive confirmation never executes its action.
+- Interactive rebase uses asynchronous Git plus private editor-helper
+  request/response files, not terminal handover. Todo and subsequent message
+  requests use multiline modals. Reword, squash, edit stops, conflicts,
+  continue, sequence cancellation, message cancellation and confirmed abort
+  have real-repository coverage. Cancelling a message does not reset an
+  in-progress rebase. Failed/oversized responses retain the draft.
+
+Local evidence on Apple-silicon macOS:
+
+- Warning-clean default build and separate `MODULES=` core-only build.
+- `make -j2 test-unit`: 3,051 tests / 73,852,198 assertions / zero failures /
+  two skips. Subsequent added Unicode-selection and mouse-isolation checks
+  pass separately: `--filter cmdline_modal`, 49 assertions, normal + ASan.
+- `make -j2 test-fuss-commands`: 642 assertions, normal and ASan/UBSan builds.
+- PTYs: 50 selected FUSS/shell/output/self-open cases, plus all nine
+  `s57_13` context-menu cases (two overlap with the FUSS selection), pass.
+  Golden changes are the intentional modal, tab-strip and dismissal text.
+- ASan/UBSan unit filters `job`, `cmdline`, `fuss`, `git`, `tab` pass.
+  `build-s59_5-san/fuzz_fuss --seed=5905 --iters=300`: corpus 5,
+  hash `2fbfa5bb38d353d5`, pass. One bounded worker; no new long fuzz campaign.
+- Man-page, manual and docs-sync checks/selftests pass. `groff` is absent,
+  so its optional lint is skipped. Clang sanitizers used `detect_leaks=0`
+  because this macOS runtime does not support LSan; no LSan claim is made.
+- Bans, command-dispatch, Fletch choke-point, input, render and signal-safety
+  checks pass. No editor-bridge helper or private request directory remained
+  after the real-Git runs. Final FUSS unit recheck: 86 tests / 3,853 assertions.
+
+Next: dogfood the Git flows, then push only when requested and run fresh
+hosted Linux/GCC/Valgrind/size/performance lanes. This local validation is not
+a new full multi-platform CI or soak signoff. Keep all features; investigate
+unexpected growth and rebaseline expected feature cost rather than removing
+functionality. Resume the existing Sprint 59 frontier afterward. Historical
+campaign/soak evidence below remains dated evidence, not a fresh live check.
 
 ## Authoritative pickup point — 2026-10-14
 
