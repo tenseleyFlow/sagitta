@@ -870,6 +870,14 @@ safety and keyboard access remain required. The implementation contract is
 `14-audits-release/s59_5-git-interaction.md`; it does not reset the independent
 Sprint 59 soak or change the numbered campaign.
 
+**Suggestion marker amendment S59.6-A1 (2026-10-20).** User-directed
+Sprint 59.6 replaces Sprint 43's `s`/`l`/`a` gutter letters with `·`/`◇`/`✦`
+for index/LSP/AI. The shared glyph table supplies `.`/`>`/`*` for ASCII or
+ambiguous-wide fallback. Provider attributes and one-cell slots remain;
+the marker is chrome, never document bytes. See
+`14-audits-release/s59_6-shadow-navigation.md` for the cursor-latency repair
+contract. Existing providers and latency gates are not removed or relaxed.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
