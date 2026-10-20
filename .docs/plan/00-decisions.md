@@ -859,6 +859,17 @@ measurement recipe, additive check, feature matrix, and 1.5 MiB full /
 900 KiB minimal post-1.0 optimization ratchets are unchanged. No feature or
 stability work is removed to recover a superseded footprint number.
 
+**Git interaction amendment S59.5-A1 (2026-10-20).** User-directed Sprint
+59.5 replaces FUSS commit scratch-pane substitution with a centered input
+modal, and Git/command-output pane substitution with explicit read-only
+temporary tabs. Escape and normal tab-close dismiss output views without
+modifying their originating documents. Interactive rebase's sequence and
+message editor requests belong to the modal flow instead of a nested
+terminal editor. Existing Git operations, cleanup semantics, document
+safety and keyboard access remain required. The implementation contract is
+`14-audits-release/s59_5-git-interaction.md`; it does not reset the independent
+Sprint 59 soak or change the numbered campaign.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
