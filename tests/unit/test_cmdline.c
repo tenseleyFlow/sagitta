@@ -16,8 +16,10 @@
 #include "edit/ed.h"
 #include "edit/file_cmds.h"
 #include "edit/mode.h"
+#include "edit/theme_cmds.h"
 #include "ui/cmdcomp.h"
 #include "ui/cmdline.h"
+#include "ui/glyphs.h"
 #include "ui/region.h"
 #include "util/buf.h"
 
@@ -552,6 +554,150 @@ void test_cmdline_modal_owns_input_and_preserves_document(void)
     YEW_ASSERT(ed->cmdline.modal && ed->win == origin);
     YEW_ASSERT_EQ_U64(ed->cmdline.cur.pos.v, 0U);
     YEW_ASSERT_EQ_U64(yew_textbuf_len(origin->buf->tb), 0U);
+    yew_cmdline_close(ed, false);
+    yew_grid_free(&ed->grid);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_modal_has_one_surface_and_readable_selection(void)
+{
+    static const char *const themes[] = {"quiver-dark", "quiver-light"};
+    CmdlineFixture fixture;
+    Ed *ed = &fixture.ed;
+    u32 theme;
+    u32 variant;
+
+    cmdline_fixture_init(&fixture);
+    YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, 24U, 80U));
+    for (theme = 0U; theme < YEW_ARRAY_LEN(themes); theme++) {
+        char error[128];
+
+        YEW_ASSERT(yew_theme_apply(ed, themes[theme], error, sizeof(error)));
+        for (variant = 0U; variant < 4U; variant++) {
+            const ThemeEnt *surface;
+            const ThemeEnt *selected;
+            Rect input;
+            u16 y;
+            u16 x;
+            Key key;
+
+            /* Draw-time rendition selection, without opening a terminal. */
+            ed->render_ready = true;
+            ed->render.tier = variant == 0U ? YEW_RENDER_TIER_TRUECOLOR :
+                              variant == 1U ? YEW_RENDER_TIER_256 :
+                                              YEW_RENDER_TIER_16;
+            ed->render.no_color = variant == 3U;
+            surface = yew_theme_ui_tab(ed, "modal.surface");
+            selected = yew_theme_ui_tab(ed, "modal.selection");
+            YEW_ASSERT_NOT_NULL(surface);
+            YEW_ASSERT_NOT_NULL(selected);
+            yew_glyph_force_ascii((variant & 1U) != 0U);
+            yew_cmdline_open_modal(ed, "Commit message", "One staged file",
+                                   "draft", true, NULL, NULL);
+            yew_cmdline_draw_modal(ed);
+            input = ed->cmdline.modal_input;
+            YEW_ASSERT_EQ_U64(input.h, 3U);
+            YEW_ASSERT_EQ_U64(input.x, 10U);
+            YEW_ASSERT_EQ_U64(input.y, 11U);
+            YEW_ASSERT(ed->grid.cur_vis);
+            for (y = 7U; y < 17U; y++) {
+                for (x = 8U; x < 72U; x++) {
+                    const Cell *cell = &ed->grid.back[(size_t)y * 80U + x];
+
+                    YEW_ASSERT_EQ_MEM(&cell->bg, &surface->bg, sizeof(cell->bg));
+                    if (y != 8U && y != 15U)
+                        YEW_ASSERT_EQ_U64(cell->attrs & YEW_ATTR_BOLD, 0U);
+                }
+            }
+            YEW_ASSERT(ed->grid.back[8U * 80U + 10U].attrs & YEW_ATTR_BOLD);
+            YEW_ASSERT(ed->grid.back[15U * 80U + 10U].attrs & YEW_ATTR_BOLD);
+            YEW_ASSERT_EQ_U64(ed->grid.back[15U * 80U + 17U].attrs, 0U);
+            key = cmdline_key(YEW_KEY_LEFT);
+            key.mods = YEW_MOD_SHIFT;
+            yew_ed_handle_key(ed, key, 1);
+            yew_cmdline_draw_modal(ed);
+            {
+                const Cell *cell = &ed->grid.back[(size_t)input.y * 80U +
+                                                   input.x + 4U];
+
+                YEW_ASSERT_EQ_MEM(&cell->fg, &selected->fg, sizeof(cell->fg));
+                YEW_ASSERT_EQ_MEM(&cell->bg, &selected->bg, sizeof(cell->bg));
+                YEW_ASSERT_EQ_U64(cell->attrs, selected->attrs);
+                YEW_ASSERT(memcmp(&cell->fg, &surface->fg, sizeof(cell->fg)) != 0 ||
+                           (cell->attrs & YEW_ATTR_REVERSE) != 0U);
+            }
+            yew_cmdline_close(ed, false);
+            ed->render_ready = false;
+        }
+    }
+    yew_glyph_reset();
+    yew_grid_free(&ed->grid);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_modal_resize_keeps_caret_and_mouse_in_input(void)
+{
+    CmdlineFixture fixture;
+    Ed *ed = &fixture.ed;
+    u16 height;
+    u16 width;
+    Key key;
+
+    cmdline_fixture_init(&fixture);
+    YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, 24U, 80U));
+    yew_cmdline_open_modal(ed, "Interactive rebase todo",
+        "First detail\nSecond detail\nThird detail\nFourth detail\nFifth detail",
+        "pick 111111 first\npick 222222 second\npick 333333 third\n"
+        "pick 444444 fourth\npick 555555 fifth\npick 666666 sixth",
+        true, NULL, NULL);
+    for (height = 1U; height <= 25U; height++) {
+        for (width = 1U; width <= 80U; width++) {
+            Rect input;
+
+            YEW_ASSERT(yew_grid_resize(&ed->grid, height, width));
+            key = cmdline_key(YEW_KEY_PAGE_DOWN);
+            yew_ed_handle_key(ed, key, 1);
+            yew_cmdline_draw_modal(ed);
+            input = ed->cmdline.modal_input;
+            if (input.h == 0U) {
+                YEW_ASSERT(!ed->grid.cur_vis);
+                continue;
+            }
+            YEW_ASSERT(input.w > 0U && input.h > 0U);
+            YEW_ASSERT(input.x + input.w < width);
+            YEW_ASSERT(input.y + input.h < height);
+            YEW_ASSERT(ed->grid.cur_vis);
+            YEW_ASSERT(ed->grid.cur_row >= input.y &&
+                       ed->grid.cur_row < input.y + input.h);
+            YEW_ASSERT(ed->grid.cur_col >= input.x &&
+                       ed->grid.cur_col < input.x + input.w);
+            YEW_ASSERT_EQ_U64(yew_textbuf_line_of(ed->cmdline.buf,
+                                                   ed->cmdline.cur.pos).v, 5U);
+        }
+    }
+    YEW_ASSERT(yew_grid_resize(&ed->grid, 24U, 80U));
+    key = cmdline_key(YEW_KEY_PAGE_UP);
+    yew_ed_handle_key(ed, key, 2);
+    yew_cmdline_draw_modal(ed);
+    YEW_ASSERT(grid_has_ascii(&ed->grid, "First detail"));
+    YEW_ASSERT(grid_has_ascii(&ed->grid, "PgUp/PgDn details"));
+    key = (Key){0};
+    key.kind = YEW_EV_MOUSE;
+    key.ev = YEW_KEY_PRESS;
+    key.button = YEW_MB_LEFT;
+    key.row = ed->cmdline.modal_input.y;
+    key.col = ed->cmdline.modal_input.x;
+    yew_mouse_event(ed, &key);
+    YEW_ASSERT_EQ_U64(yew_textbuf_line_of(ed->cmdline.buf,
+                                           ed->cmdline.cur.pos).v,
+                      ed->cmdline.modal_top);
+    yew_cmdline_close(ed, false);
+    /* No metadata still gives a single-line prompt an editable row. */
+    yew_cmdline_open_modal(ed, "Branch name", "", "topic", false, NULL, NULL);
+    yew_cmdline_draw_modal(ed);
+    YEW_ASSERT_EQ_U64(ed->cmdline.modal_input.h, 1U);
+    YEW_ASSERT(grid_has_ascii(&ed->grid, "Enter/Ctrl-S accept"));
+    YEW_ASSERT(grid_has_ascii(&ed->grid, "Esc cancel"));
     yew_cmdline_close(ed, false);
     yew_grid_free(&ed->grid);
     cmdline_fixture_free(&fixture);

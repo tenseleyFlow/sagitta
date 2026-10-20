@@ -1,0 +1,77 @@
+# yew pty golden v1
+size 100x24 alt=1 cursor=12,29 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+fussrepo · trunk        | 1 main.c  +                                                               
+ + docs x               |    1 int main(void) { return 0; }                                         
+ - src ^ x              |    1                                                                      
+     both.c ^ x         |                                                                           
+     main.c             |                                                                           
+     modified.c x       |                                                                           
+     staged.c ^         |                                                                           
+   README.md      +--------------------------------------------------------------+                  
+   untracked.txt x| Commit message                                               |                  
+                  | trunk | 2 staged | Empty message cancels                     |                  
+                  |                                                              |                  
+                  | modal subject                                                |                  
+                  | body text                                                    |                  
+                  |                                                              |                  
+                  |                                                              |                  
+                  | Ctrl-S accept  Enter newline  Esc cancel                     |                  
+                  +--------------------------------------------------------------+                  
+                        |                                                                           
+                        |                                                                           
+                        |                                                                           
+                        |                                                                           
+                        |                                                                           
+                        |Legend: ^ staged  x modified  x untracked  v incoming  ! conflict          
+                        |type jump | Alt+key actions | C-S-/ list | Esc leave                       
+--- style
+AAAAAAAABBBAAAAABBBBBBBBCDDDDDDDDDDEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+GGGGGGGHHGGGGGGGGGGGGGGGCIIIIJIKKKLMMMMNKKKKNLNLOOOOOOLPNLNLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBQQRRBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBQQRRBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBRRBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBQQBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBFFSTUUUUUUUUUUUUUUTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBSTVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTTTTTTTTTTTTTTTTTTTTTSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBSTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBSTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBSTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBSTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBSTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBSTUUUUUUVVVVVVVVVUUUUUVVVVVVVVVVUUUVVVVVVVTTTTTTTTTTTTTTTTTTTTTSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBBBBBBBCIIIIIILLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL
+BBBBBBBBBBBBBBBBBBBBBBBBCWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+BBBBBBBBBBBBBBBBBBBBBBBBCWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+--- legend
+A fg=#c8ccd4 bg=#1b202a attrs=b---------
+B fg=#c8ccd4 bg=#1b202a attrs=----------
+C fg=#ffffff bg=#1b202a attrs=b---------
+D fg=#c8ccd4 bg=#2c313a attrs=b---------
+E fg=#61afef bg=#1b202a attrs=b---------
+F fg=#5c6370 bg=#1b202a attrs=----------
+G fg=#c8ccd4 bg=#1b202a attrs=------r---
+H fg=#e06c75 bg=#1b202a attrs=------r---
+I fg=#4b5263 bg=#12141a attrs=-d--------
+J fg=#c8ccd4 bg=#12141a attrs=bd--------
+K fg=#e5c07b bg=#12141a attrs=-di-------
+L fg=#c8ccd4 bg=#12141a attrs=-d--------
+M fg=#61afef bg=#12141a attrs=-d--------
+N fg=#9aa0aa bg=#12141a attrs=-d--------
+O fg=#c678dd bg=#12141a attrs=bd--------
+P fg=#d19a66 bg=#12141a attrs=-d--------
+Q fg=#98c379 bg=#1b202a attrs=----------
+R fg=#e06c75 bg=#1b202a attrs=----------
+S fg=#79512b bg=#df8f3f attrs=----------
+T fg=#2f1806 bg=#df8f3f attrs=----------
+U fg=#2f1806 bg=#df8f3f attrs=b---------
+V fg=#4f3118 bg=#df8f3f attrs=----------
+W fg=#faebf8 bg=#b13d9b attrs=----------

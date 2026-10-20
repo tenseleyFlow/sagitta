@@ -1,0 +1,61 @@
+# yew pty golden v1
+size 100x24 alt=1 cursor=12,29 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+fussrepo · trunk        │ 1 main.c  + 
+ + docs ✗               │    1 int main(void) { return 0; }                                         
+ - src ↑ ✗              │    1                                                                      
+     both.c ↑ ✗         │                                                                           
+     main.c             │                                                                           
+     modified.c ✗       │                                                                           
+     staged.c ↑         │                                                                           
+   README.md      ╭──────────────────────────────────────────────────────────────╮                  
+   untracked.txt ✗│ Commit message                                               │                  
+                  │ trunk | 2 staged | Empty message cancels                     │                  
+                  │                                                              │                  
+                  │ modal subject                                                │                  
+                  │ body text                                                    │                  
+                  │                                                              │                  
+                  │                                                              │                  
+                  │ Ctrl-S accept  Enter newline  Esc cancel                     │                  
+                  ╰──────────────────────────────────────────────────────────────╯                  
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │                                                                           
+                        │Legend: ↑ staged  ✗ modified  ✗ untracked  ↓ incoming  ! conflict
+                        │type jump · Alt+key actions · C-S-/ list · Esc leave
+--- style
+AAAAAAAABBBAAAAABBBBBBBBACCCCCCCCCCAAA
+CCCCCCCDDCCCCCCCCCCCCCCCAEEEEFEGGGEEEEEEGGGGEEEEFFFFFFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBAAAABBBBBBBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBAAAABBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBAABBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBAABBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBEEBBAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBAAAAAABBBBBBBBBAAAAABBBBBBBBBBAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+BBBBBBBBBBBBBBBBBBBBBBBBABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+--- legend
+A fg=default bg=default attrs=b---------
+B fg=default bg=default attrs=----------
+C fg=default bg=default attrs=------r---
+D fg=default bg=default attrs=b-----r---
+E fg=default bg=default attrs=-d--------
+F fg=default bg=default attrs=bd--------
+G fg=default bg=default attrs=-di-------

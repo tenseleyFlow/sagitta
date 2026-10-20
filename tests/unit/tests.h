@@ -1165,6 +1165,8 @@ void test_cmdline_escape_restores_completion_stem_before_closing(void);
 void test_cmdline_accepts_registered_command_and_closes(void);
 void test_cmdline_input_draws_the_full_multiline_message(void);
 void test_cmdline_modal_owns_input_and_preserves_document(void);
+void test_cmdline_modal_has_one_surface_and_readable_selection(void);
+void test_cmdline_modal_resize_keeps_caret_and_mouse_in_input(void);
 void test_cmdline_range_executes_once_with_multiple_cursors(void);
 void test_cmdline_bang_quit_bypasses_durability_failure(void);
 void test_cmdline_parse_error_preserves_text_and_points_at_token(void);

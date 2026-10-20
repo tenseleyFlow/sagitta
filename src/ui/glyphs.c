@@ -53,7 +53,11 @@ static const GlyphRow glyphs[] = {
     [YEW_GLYPH_GIT_BEHIND] = {"\xE2\x86\x93", "v"},    /* ↓ */
     [YEW_GLYPH_SHADOW_INDEX] = {"\xC2\xB7", "."},      /* · */
     [YEW_GLYPH_SHADOW_LSP] = {"\xE2\x97\x87", ">"},    /* ◇ */
-    [YEW_GLYPH_SHADOW_AI] = {"\xE2\x9C\xA6", "*"}      /* ✦ */
+    [YEW_GLYPH_SHADOW_AI] = {"\xE2\x9C\xA6", "*"},     /* ✦ */
+    [YEW_GLYPH_ROUND_TL] = {"\xE2\x95\xAD", "+"},      /* ╭ */
+    [YEW_GLYPH_ROUND_TR] = {"\xE2\x95\xAE", "+"},      /* ╮ */
+    [YEW_GLYPH_ROUND_BL] = {"\xE2\x95\xB0", "+"},      /* ╰ */
+    [YEW_GLYPH_ROUND_BR] = {"\xE2\x95\xAF", "+"}       /* ╯ */
 };
 
 _Static_assert(YEW_ARRAY_LEN(glyphs) == (size_t)YEW_GLYPH__N,

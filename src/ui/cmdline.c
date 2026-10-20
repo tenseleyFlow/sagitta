@@ -16,6 +16,7 @@
 #include "edit/shell.h"
 #include "edit/shsession.h"
 #include "fl/flruntime.h"
+#include "syn/theme.h"
 #include "term/grid.h"
 #include "text/edit.h"
 #include "text/register.h"
@@ -3770,14 +3771,60 @@ static Span modal_line_span(const TextBuf *tb, u64 row)
     return span;
 }
 
-static void modal_label(Ed *ed, u16 y, u16 x, u16 width,
-                         const char *text, const YewUiStyle *style)
+/* Only the surface owns a background. Typography never leaves shaded
+ * rectangles behind labels, and custom themes need only define one fill. */
+static Cell modal_ink(Ed *ed, const char *role, Cell surface, u16 attrs)
+{
+    const ThemeEnt *ent = yew_theme_ui_tab(ed, role);
+
+    surface.attrs = attrs;
+    if (ent != NULL) {
+        if (ent->fg.tag != YEW_COLOR_DEFAULT)
+            surface.fg = ent->fg;
+        surface.attrs = ent->attrs;
+    }
+    return surface;
+}
+
+static u16 modal_label(Ed *ed, u16 y, u16 x, u16 width,
+                        const char *text, Cell ink)
 {
     int cells;
     size_t len = yew_str_clip((const u8 *)text, strlen(text), width, &cells);
 
     (void)yew_grid_puts(&ed->grid, y, x, (const u8 *)text, len,
-                       style->chip_fg, style->chip_bg, style->attrs);
+                       ink.fg, ink.bg, ink.attrs);
+    return (u16)cells;
+}
+
+static void modal_hint(Ed *ed, u16 y, u16 *x, u16 end,
+                       const char *key, const char *description,
+                       Cell key_ink, Cell detail)
+{
+    *x = (u16)(*x + modal_label(ed, y, *x, (u16)(end - *x), key, key_ink));
+    *x = (u16)(*x + modal_label(ed, y, *x, (u16)(end - *x), description, detail));
+}
+
+static void modal_footer(Ed *ed, Rect box, bool details,
+                         Cell key, Cell detail)
+{
+    u16 y = (u16)(box.y + box.h - 2U);
+    u16 x = (u16)(box.x + 2U);
+    u16 end = (u16)(box.x + box.w - 2U);
+
+    /* Cancellation remains discoverable even in a narrow terminal. */
+    if (box.w < 46U) {
+        modal_hint(ed, y, &x, end, "Esc", " cancel  ", key, detail);
+        modal_hint(ed, y, &x, end, "Ctrl-S", " accept", key, detail);
+        return;
+    }
+    modal_hint(ed, y, &x, end, ed->cmdline.multiline ? "Ctrl-S" : "Enter/Ctrl-S",
+                " accept  ", key, detail);
+    if (ed->cmdline.multiline)
+        modal_hint(ed, y, &x, end, "Enter", " newline  ", key, detail);
+    modal_hint(ed, y, &x, end, "Esc", " cancel", key, detail);
+    if (details)
+        modal_hint(ed, y, &x, end, "  PgUp/PgDn", " details", key, detail);
 }
 
 static size_t modal_help_span(const char *text, size_t at, u16 width,
@@ -3801,6 +3848,13 @@ void yew_cmdline_draw_modal(Ed *ed)
 {
     CmdLine *line;
     YewUiStyle style;
+    const ThemeEnt *ent;
+    Cell surface;
+    Cell title;
+    Cell detail;
+    Cell border;
+    Cell key_ink;
+    Cell selected;
     Rect box;
     Rect input;
     u64 rows;
@@ -3815,6 +3869,8 @@ void yew_cmdline_draw_modal(Ed *ed)
     Span selection = {0U, 0U};
     u32 help_lines = 0U;
     u16 help_rows;
+    u16 gap;
+    u16 input_rows;
     size_t help_at = 0U;
     size_t help_len;
 
@@ -3824,6 +3880,28 @@ void yew_cmdline_draw_modal(Ed *ed)
     line = &ed->cmdline;
     sync_from_target(line);
     style = yew_statusline_mode_style(YEW_MODE_E);
+    surface = (Cell){0};
+    surface.w = 1U;
+    surface.fg = style.chip_fg;
+    surface.bg = style.chip_bg;
+    ent = yew_theme_ui_tab(ed, "modal.surface");
+    if (ent != NULL) {
+        surface.fg = ent->fg;
+        surface.bg = ent->bg;
+        surface.attrs = ent->attrs;
+    }
+    title = modal_ink(ed, "modal.title", surface, YEW_ATTR_BOLD);
+    detail = modal_ink(ed, "modal.detail", surface, 0U);
+    border = modal_ink(ed, "modal.border", surface, 0U);
+    key_ink = modal_ink(ed, "modal.key", surface, YEW_ATTR_BOLD);
+    selected = surface;
+    selected.attrs ^= YEW_ATTR_REVERSE;
+    ent = yew_theme_ui_tab(ed, "modal.selection");
+    if (ent != NULL) {
+        selected.fg = ent->fg;
+        selected.bg = ent->bg;
+        selected.attrs = ent->attrs;
+    }
     rows = yew_textbuf_line_count(line->buf);
     cursor_row = yew_textbuf_line_of(line->buf, line->cur.pos).v;
     width = 64U;
@@ -3852,20 +3930,19 @@ void yew_cmdline_draw_modal(Ed *ed)
     help_rows = ed->grid.rows / 3U > 4U ? 4U : (u16)(ed->grid.rows / 3U);
     if (help_rows > help_lines)
         help_rows = (u16)help_lines;
-    if (help_rows == 0U)
-        help_rows = 1U;
-    if (line->modal_help_top + help_rows > help_lines)
-        line->modal_help_top = help_lines > help_rows ? help_lines - help_rows : 0U;
-    height = (u16)((rows > 16U ? 16U : rows) + help_rows + 4U);
+    input_rows = (u16)(rows > 16U ? 16U : rows);
+    if (line->multiline && input_rows < 3U)
+        input_rows = 3U;
+    height = (u16)(input_rows + help_rows + 6U);
     if (height > ed->grid.rows - (ed->grid.rows > 8U ? 4U : 0U))
         height = (u16)(ed->grid.rows - (ed->grid.rows > 8U ? 4U : 0U));
     box = (Rect){(u16)((ed->grid.cols - width) / 2U),
                   (u16)((ed->grid.rows - height) / 2U), width, height};
     for (y = box.y; y < (u16)(box.y + box.h); y++)
         yew_grid_fill(&ed->grid, y, box.x, (u16)(box.x + box.w),
-                      styled_blank(&style));
-    if (box.w < 5U || box.h < 6U) {
-        modal_label(ed, box.y, box.x, box.w, "Resize; Esc cancels", &style);
+                      surface);
+    if (box.w < 5U || box.h < (help_lines != 0U ? 6U : 5U)) {
+        (void)modal_label(ed, box.y, box.x, box.w, "Resize; Esc cancels", detail);
         line->modal_input = (Rect){0U, 0U, 0U, 0U};
         yew_grid_cursor(&ed->grid, 0U, 0U, false);
         return;
@@ -3875,27 +3952,34 @@ void yew_cmdline_draw_modal(Ed *ed)
             YewGlyph glyph;
 
             if (y == 0U)
-                glyph = x == 0U ? YEW_GLYPH_BORDER_TL :
-                         x + 1U == box.w ? YEW_GLYPH_BORDER_TR :
+                glyph = x == 0U ? YEW_GLYPH_ROUND_TL :
+                         x + 1U == box.w ? YEW_GLYPH_ROUND_TR :
                                            YEW_GLYPH_BORDER_H;
             else if (y + 1U == box.h)
-                glyph = x == 0U ? YEW_GLYPH_BORDER_BL :
-                         x + 1U == box.w ? YEW_GLYPH_BORDER_BR :
+                glyph = x == 0U ? YEW_GLYPH_ROUND_BL :
+                         x + 1U == box.w ? YEW_GLYPH_ROUND_BR :
                                            YEW_GLYPH_BORDER_H;
             else if (x == 0U || x + 1U == box.w)
                 glyph = YEW_GLYPH_BORDER_V;
             else
                 continue;
+            if (yew_glyph_cells(glyph) != 1U)
+                YEW_BUG("modal border glyph must occupy one cell");
             (void)yew_grid_put(&ed->grid, (u16)(box.y + y),
                                (u16)(box.x + x), (const u8 *)yew_glyph(glyph),
-                               yew_glyph_len(glyph), style.chip_fg,
-                               style.chip_bg, style.attrs);
+                               yew_glyph_len(glyph), border.fg,
+                               border.bg, border.attrs);
         }
     }
-    modal_label(ed, box.y, (u16)(box.x + 2U), (u16)(box.w - 4U),
-                 line->modal_title, &style);
-    if (help_rows > box.h - 4U)
-        help_rows = (u16)(box.h - 4U);
+    (void)modal_label(ed, (u16)(box.y + 1U), (u16)(box.x + 2U),
+                      (u16)(box.w - 4U), line->modal_title, title);
+    /* Shrink padding before disclosure text, never let decoration hide
+     * the entire target/confirmation message on a short terminal. */
+    gap = box.h >= help_rows + 7U ? 1U : 0U;
+    if (help_rows > box.h - 5U - 2U * gap)
+        help_rows = (u16)(box.h - 5U - 2U * gap);
+    if (line->modal_help_top + help_rows > help_lines)
+        line->modal_help_top = help_lines > help_rows ? help_lines - help_rows : 0U;
     help_at = 0U;
     for (i = 0U; i < line->modal_help_top + help_rows &&
                   line->modal_help[help_at] != '\0'; i++) {
@@ -3908,19 +3992,16 @@ void yew_cmdline_draw_modal(Ed *ed)
                                            help_len, box.w - 4U, &cells);
 
             (void)yew_grid_puts(&ed->grid,
-                (u16)(box.y + 1U + i - line->modal_help_top),
+                (u16)(box.y + 2U + i - line->modal_help_top),
                 (u16)(box.x + 2U), (const u8 *)line->modal_help + help_at,
-                clipped, style.chip_fg, style.chip_bg, style.attrs);
+                clipped, detail.fg, detail.bg, detail.attrs);
         }
         help_at = next;
     }
-    modal_label(ed, (u16)(box.y + box.h - 2U), (u16)(box.x + 2U),
-                 (u16)(box.w - 4U), help_lines > help_rows ?
-                 "PgUp/PgDn details | Ctrl-S accept | Esc cancel" : line->multiline ?
-                 "Ctrl-S accept | Enter newline | Esc cancel" :
-                 "Enter / Ctrl-S accept | Esc cancel", &style);
-    input = (Rect){(u16)(box.x + 2U), (u16)(box.y + 1U + help_rows),
-                    (u16)(box.w - 4U), (u16)(box.h - 3U - help_rows)};
+    modal_footer(ed, box, help_lines > help_rows, key_ink, detail);
+    input = (Rect){(u16)(box.x + 2U), (u16)(box.y + 2U + help_rows + gap),
+                    (u16)(box.w - 4U),
+                    (u16)(box.h - 4U - help_rows - 2U * gap)};
     line->modal_input = input;
     if (cursor_row < line->modal_top)
         line->modal_top = cursor_row;
@@ -3960,17 +4041,16 @@ void yew_cmdline_draw_modal(Ed *ed)
                     bytes = yew_xmalloc(n);
                 text_copy_span(line->buf, cluster.bytes, bytes);
                 (void)yew_grid_put(&ed->grid, (u16)(input.y + y), gx,
-                                   bytes, n, style.row_fg, style.row_bg, 0U);
+                                   bytes, n, surface.fg, surface.bg, surface.attrs);
                 if (bytes != local)
                     yew_xfree(bytes);
             }
             if (cluster.bytes.lo < selection.hi &&
                 cluster.bytes.hi > selection.lo) {
-                Cell selected;
-                u8 fields = yew_draw_sel_style(ed, &selected);
-
                 yew_grid_overlay(&ed->grid, (u16)(input.y + y), gx,
-                                  (u16)(gx + cells), &selected, fields);
+                                  (u16)(gx + cells), &selected,
+                                  YEW_OVERLAY_FG | YEW_OVERLAY_BG |
+                                  YEW_OVERLAY_ATTRS);
             }
             col.v += cells;
             at = BYTEOFF(cluster.bytes.hi);

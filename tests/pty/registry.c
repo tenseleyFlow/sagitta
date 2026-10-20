@@ -11180,9 +11180,28 @@ static void case_s59_5_fuss_commit_modal(PtyCtx *c)
         ptc_keys(c, "esc");
         ptc_wait_until(c, s52_screen_contains_visible_cursor,
                        "int main(void)", "commit cancel did not restore document");
-        ptc_check(c, memcmp(original, c->vt.cells,
-                  (size_t)(c->vt.rows - 1U) * c->vt.cols * sizeof(*original)) == 0,
-                  "commit modal changed the originating document view");
+        {
+            size_t i;
+            bool restored = true;
+
+            for (i = 0U; i < (size_t)(c->vt.rows - 1U) * c->vt.cols; i++) {
+                const VtCell *a = &original[i];
+                const VtCell *b = &c->vt.cells[i];
+
+                /* Erase-to-end and painted blanks can leave different
+                 * unused glyph bytes (especially under NO_COLOR). Compare
+                 * the complete visible state, not that storage history. */
+                if (a->nb != b->nb || a->w != b->w || a->attrs != b->attrs ||
+                    memcmp(a->g, b->g, a->nb) != 0 ||
+                    memcmp(&a->fg, &b->fg, sizeof(a->fg)) != 0 ||
+                    memcmp(&a->bg, &b->bg, sizeof(a->bg)) != 0) {
+                    restored = false;
+                    break;
+                }
+            }
+            ptc_check(c, restored,
+                      "commit modal changed the originating document view");
+        }
         force_quit(c);
     }
     free(original);
@@ -12764,6 +12783,16 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_diff_viewer_restores_layout, modern, 24U, 100U,
       case_s52_fuss_diff_viewer),
     C(s59_5_fuss_commit_modal, modern, 24U, 100U,
+      case_s59_5_fuss_commit_modal),
+    C(s59_5_fuss_commit_modal_light_theme, modern, 24U, 100U,
+      case_s59_5_fuss_commit_modal),
+    C(s59_5_fuss_commit_modal_colors_256, modern, 24U, 100U,
+      case_s59_5_fuss_commit_modal),
+    C(s59_5_fuss_commit_modal_colors_16, modern, 24U, 100U,
+      case_s59_5_fuss_commit_modal),
+    C(s59_5_fuss_commit_modal_nocolor, modern, 24U, 100U,
+      case_s59_5_fuss_commit_modal),
+    C(s59_5_fuss_commit_modal_ascii, modern, 24U, 100U,
       case_s59_5_fuss_commit_modal),
     C(fuss_loading_first_frame, modern, 24U, 80U,
       case_s52_fuss_loading),

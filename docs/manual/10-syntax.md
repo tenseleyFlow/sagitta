@@ -55,3 +55,12 @@ rehighlighting because syntax stores meanings, not colors.
 query and chooses a light or dark theme; malformed or absent replies retain
 the configured theme. Color degrades deterministically from truecolor through
 256 and 16 colors to no-color styles.
+
+Input modals use `ui."modal.surface"` for their shared background and input
+text. `modal.title`, `modal.detail`, `modal.border`, and `modal.key` change
+foreground/attributes only, keeping that surface continuous. The separate
+`modal.selection` role supplies selected text's foreground, background and
+attributes. The built-in themes use warm orange surfaces, bold titles/key
+hints and a contrasting selection; no-color retains bold and reverse-video
+selection. Rounded borders fall back to ASCII with `YEW_ASCII=1` or when
+the configured character widths would exceed their one-cell slots.

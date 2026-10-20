@@ -82,6 +82,11 @@ typedef enum {
     YEW_GLYPH_SHADOW_INDEX,
     YEW_GLYPH_SHADOW_LSP,
     YEW_GLYPH_SHADOW_AI,
+    /* Rounded input-modal corners; ASCII and wide-ambiguous fallback: +. */
+    YEW_GLYPH_ROUND_TL,
+    YEW_GLYPH_ROUND_TR,
+    YEW_GLYPH_ROUND_BL,
+    YEW_GLYPH_ROUND_BR,
     YEW_GLYPH__N
 } YewGlyph;
 

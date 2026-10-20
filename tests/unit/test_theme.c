@@ -81,7 +81,8 @@ void test_theme_defaults_compile_with_full_attr_coverage(void)
         "tab.bar", "tab.active", "tab.inactive", "tab.modified",
         "tab.orphan", "tab.add",
         "menu.surface", "menu.row", "menu.hover", "menu.disabled",
-        "menu.accel", "menu.sep"
+        "menu.accel", "menu.sep", "modal.surface", "modal.title",
+        "modal.detail", "modal.border", "modal.key", "modal.selection"
     };
     ThemeFix f;
     u32 file;
