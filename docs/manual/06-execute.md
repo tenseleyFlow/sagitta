@@ -21,8 +21,12 @@ range to a command that forbids one is an error before any mutation.
 ## Shell commands
 
 `:!COMMAND` runs through the user's shell and opens stdout/stderr in a
-dismissible output buffer. Escape or `:q` returns to the source document.
-The source buffer is not replaced and the output buffer is not saved over it.
+named, read-only temporary tab. Escape, `:q`, or the normal tab-close action
+closes that view and returns to its originating tab, if it still exists.
+The source document, cursor, splits, and undo history stay untouched.
+Closing output does not stop its job; `:jobs` opens a temporary job-list tab
+from which output can be reopened. Empty-output jobs remove their empty tab.
+Explicit `:r !` and ranged filters still insert or replace document text.
 `:!!COMMAND` is the explicit terminal-handover form for interactive programs;
 it temporarily restores the terminal and repaints the editor afterward.
 

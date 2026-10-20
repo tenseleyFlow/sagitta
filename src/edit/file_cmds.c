@@ -406,15 +406,21 @@ CmdStatus yew_file_cmd_reload(CmdCtx *cx)
 
 CmdStatus yew_file_cmd_quit(CmdCtx *cx)
 {
+    bool owned_output;
+
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_ARG;
     /* Sprint 57.31 §2: `:q` closes A-e's buffer and returns its line;
      * `:q!` returns the original. */
     if (cx->ed->win != NULL && yew_cmdedit_owns(cx->ed, cx->ed->win->buf))
         return yew_cmdedit_close(cx->ed, cx->bang);
+    owned_output = cx->ed->win != NULL && cx->ed->win->buf != NULL &&
+                   (cx->ed->win->buf->flags & YEW_BUF_TRANSIENT) != 0U;
     if (!cx->bang && yew_shell_dismiss_output(cx->ed)) {
-        yew_msg(cx->ed, YEW_MSG_INFO,
-                "job output hidden; :jobs to reopen");
+        if (!cx->ed->tab_prompt.active)
+            yew_msg(cx->ed, YEW_MSG_INFO, "%s", owned_output ?
+                    "output view closed" :
+                    "output view closed; command output remains in :jobs");
         return YEW_CMD_OK;
     }
     return yew_ed_request_quit(cx->ed, cx->bang);

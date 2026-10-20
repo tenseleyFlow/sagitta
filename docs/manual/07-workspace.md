@@ -29,6 +29,13 @@ ordinary command, or `:!yew PATH`—joins the end of the matching directory
 group; otherwise it becomes the rightmost ordinary tab. Paths outside the
 workspace never appear in FUSS.
 
+Command and Git output use separate, named, read-only temporary tabs. They
+are not group members and are not restored with the next workspace session.
+Escape or normal tab-close returns to the originating tab by identity, even
+after other tabs were reordered or closed. FUSS resumes when it opened the
+view. Input-taking Git actions use centered modals that own keyboard and
+mouse input without replacing or editing the underlying document.
+
 Mouse hit regions and keyboard commands share the same registered actions.
 Dragging a tab to a pane edge can create a split; Escape cancels an armed
 drag. If the pane count or layout changes mid-drag, the drop is discarded

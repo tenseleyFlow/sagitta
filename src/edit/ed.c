@@ -587,6 +587,23 @@ void yew_ws_scratch_drop(Ed *ed, Buffer *b)
          * this buffer falls back to the document buffer first. */
         if (ed->win != NULL && ed->win->buf == b)
             (void)yew_ed_show_buffer(ed, &ed->buffer);
+        {
+            size_t tab;
+
+            for (tab = 0U; tab < ed->tabs.v.len; tab++) {
+                Tab *t = &ed->tabs.v.data[tab];
+                Pane *leaves[YEW_PANE_MAX_LEAVES];
+                u32 n = 0U;
+                u32 leaf;
+
+                yew_pane_collect_leaves(t->root, leaves, YEW_ARRAY_LEN(leaves), &n);
+                for (leaf = 0U; leaf < n; leaf++)
+                    if (leaves[leaf]->win != NULL && leaves[leaf]->win->buf == b)
+                        yew_ed_win_set_buffer(ed, leaves[leaf]->win, &ed->buffer);
+                if (t->buffer_id == b->id)
+                    t->buffer_id = ed->buffer.id;
+            }
+        }
         /* Sprint 57.31 §2: A-e's return hangs off this release, not off
          * whichever command closed the buffer. */
         yew_cmdedit_released(ed, b);

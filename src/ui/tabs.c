@@ -420,10 +420,14 @@ int yew_tab_open_transient(Ed *ed, Buffer *buf)
 bool yew_tab_dismiss_transient(Ed *ed)
 {
     Tab *tab = ed == NULL ? NULL : yew_tab_at(ed, ed->tabs.active);
+    CmdCtx cx = {0};
 
-    if (tab == NULL || !tab->transient || ed->tabs.v.len <= 1U)
+    if (tab == NULL || !tab->transient)
         return false;
-    return yew_tab_close(ed, ed->tabs.active);
+    cx.ed = ed;
+    cx.win = ed->win;
+    (void)yew_tab_cmd_close(&cx);
+    return true;
 }
 
 static u32 pick_survivor_id(const Ed *ed, int idx)
@@ -451,6 +455,9 @@ bool yew_tab_close(Ed *ed, int idx)
     bool restore_fuss;
 
     if (ed == NULL || idx < 0 || (size_t)idx >= ed->tabs.v.len)
+        return false;
+    if (ed->tabs.v.len == 1U && ed->tabs.v.data[idx].transient &&
+        yew_tab_open(ed, NULL) < 0)
         return false;
     survivor = pick_survivor_id(ed, idx);
     restore_fuss = ed->tabs.active == idx &&
@@ -484,6 +491,37 @@ bool yew_tab_close(Ed *ed, int idx)
         }
     }
     yew_fuss_windows_changed(ed);
+    {
+        u32 b = 1U;
+
+        while (b < ed->ws.nbufs) {
+            Buffer *buffer = ed->ws.bufs[b];
+            bool viewed = false;
+            size_t tab;
+
+            if ((buffer->flags & YEW_BUF_TRANSIENT) == 0U) {
+                b++;
+                continue;
+            }
+            for (tab = 0U; tab < ed->tabs.v.len && !viewed; tab++) {
+                Pane *leaves[YEW_PANE_MAX_LEAVES];
+                u32 n = 0U;
+                u32 i;
+
+                if (ed->tabs.v.data[tab].buffer_id == buffer->id)
+                    viewed = true;
+                yew_pane_collect_leaves(ed->tabs.v.data[tab].root, leaves,
+                                        YEW_ARRAY_LEN(leaves), &n);
+                for (i = 0U; i < n; i++)
+                    if (leaves[i]->win != NULL && leaves[i]->win->buf == buffer)
+                        viewed = true;
+            }
+            if (viewed)
+                b++;
+            else
+                yew_ws_scratch_drop(ed, buffer);
+        }
+    }
     yew_state_mark_dirty(ed);
     return true;
 }
@@ -2104,7 +2142,7 @@ CmdStatus yew_tab_cmd_close(CmdCtx *cx)
      * never "modified" in the save-or-discard sense. */
     if (ed->win != NULL && yew_cmdedit_owns(ed, ed->win->buf))
         return yew_cmdedit_close(ed, false);
-    if (yew_tab_count(ed) <= 1U) {
+    if (yew_tab_count(ed) <= 1U && !yew_tab_at(ed, idx)->transient) {
         yew_msg(ed, YEW_MSG_ERROR, "cannot close the last tab");
         return YEW_CMD_ERR_STATE;
     }

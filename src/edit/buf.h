@@ -12,7 +12,10 @@
 enum {
     YEW_BUF_SCRATCH = 1U << 0,
     YEW_BUF_NOUNDO = 1U << 1,
-    YEW_BUF_READONLY = 1U << 2
+    YEW_BUF_READONLY = 1U << 2,
+    /* Unowned output: collect after its last tab/pane closes. Jobs do not
+     * set this while their output remains reopenable through :jobs. */
+    YEW_BUF_TRANSIENT = 1U << 3
 };
 
 typedef struct Buffer {

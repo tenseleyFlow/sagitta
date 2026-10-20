@@ -296,7 +296,7 @@ void test_job_output_dismiss_and_quit_restore_dirty_origin(void)
     YEW_ASSERT(!ed.quit);
     YEW_ASSERT(ed.win->buf == origin);
     YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_NONE);
-    YEW_ASSERT(strstr(ed.msg.text, ":jobs to reopen") != NULL);
+    YEW_ASSERT(strstr(ed.msg.text, "command output remains in :jobs") != NULL);
 
     /* A second q reaches the real document and cannot evade its guard. */
     cx.win = ed.win;
@@ -306,6 +306,50 @@ void test_job_output_dismiss_and_quit_restore_dirty_origin(void)
     cx.bang = true;
     YEW_ASSERT_EQ_U64(yew_file_cmd_quit(&cx), YEW_CMD_OK);
     YEW_ASSERT(ed.quit);
+    yew_ed_free(&ed);
+}
+
+void test_job_output_tabs_handle_missing_origins_and_owned_buffers(void)
+{
+    Ed ed;
+    char err[256] = {0};
+    Buffer *output;
+    Buffer *owned;
+    u32 id;
+    u32 owned_id;
+    CmdCtx cx = {0};
+
+    job_fixture(&ed);
+    id = yew_shell_run(&ed, "printf output", true, err, sizeof(err));
+    YEW_ASSERT(id != 0U && run_to_completion(&ed, id));
+    output = ed.win->buf;
+    YEW_ASSERT(yew_tab_close(&ed, 0));
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 1U);
+    YEW_ASSERT(yew_tab_dismiss_transient(&ed));
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 1U);
+    YEW_ASSERT(!yew_tab_at(&ed, ed.tabs.active)->transient);
+    YEW_ASSERT(ed.win->buf != output);
+    YEW_ASSERT(yew_job_find(&ed, id)->buf == output);
+
+    owned = yew_ws_scratch_new(&ed, "*git output*",
+        YEW_BUF_NOUNDO | YEW_BUF_READONLY | YEW_BUF_TRANSIENT);
+    YEW_ASSERT_NOT_NULL(owned);
+    owned_id = owned->id;
+    YEW_ASSERT(yew_tab_open_transient(&ed, owned) >= 0);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    YEW_ASSERT_EQ_U64(yew_tab_cmd_close(&cx), YEW_CMD_OK);
+    YEW_ASSERT_NULL(yew_ws_buf_by_id(&ed, owned_id));
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 1U);
+
+    /* A dropped scratch can also be displayed by an inactive tab. */
+    YEW_ASSERT(yew_tab_open_transient(&ed, output) >= 0);
+    yew_tab_switch(&ed, 0);
+    yew_job_find(&ed, id)->buf = NULL;
+    yew_ws_scratch_drop(&ed, output);
+    YEW_ASSERT(yew_tab_buffer(&ed, 1) == &ed.buffer);
+    yew_tab_switch(&ed, 1);
+    YEW_ASSERT(ed.win->buf == &ed.buffer);
     yew_ed_free(&ed);
 }
 
