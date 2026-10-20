@@ -45,6 +45,7 @@ typedef struct CmdLine {
     Rect modal_input;
     u64 modal_top;
     u64 modal_left;
+    u32 modal_help_top;
     /* Monotonic identity for one prompt lifetime.  The CmdLine storage is
      * embedded in Ed and reused, so pointer identity cannot distinguish a
      * prompt that a command replaced while Enter was being handled. */

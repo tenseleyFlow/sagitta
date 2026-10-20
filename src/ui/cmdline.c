@@ -602,6 +602,7 @@ void yew_cmdline_open_modal(Ed *ed, const char *title, const char *help,
     line->modal_help = yew_xstrdup(help == NULL ? "" : help);
     line->modal_top = 0U;
     line->modal_left = 0U;
+    line->modal_help_top = 0U;
     line->modal_input = (Rect){0U, 0U, 0U, 0U};
     if (seed != NULL)
         (void)insert_sanitized(ed, (const u8 *)seed, strlen(seed));
@@ -1394,6 +1395,15 @@ static bool modal_key(Ed *ed, const Key *key)
             return true;
         }
         cmd = "ed.cmdline.accept";
+    } else if (code == YEW_KEY_PAGE_DOWN) {
+        if (ed->cmdline.modal_help_top <= UINT32_MAX - 3U)
+            ed->cmdline.modal_help_top += 3U;
+    } else if (code == YEW_KEY_PAGE_UP) {
+        ed->cmdline.modal_help_top = ed->cmdline.modal_help_top > 3U ?
+                                     ed->cmdline.modal_help_top - 3U : 0U;
+    } else if (code == YEW_KEY_TAB && ed->cmdline.multiline) {
+        (void)insert_sanitized(ed, (const u8 *)"\t", 1U);
+        return true;
     } else if (code == YEW_KEY_LEFT) {
         cmd = shift ? (alt ? "ed.sel.extend.word_prev" :
                              "ed.sel.extend.left") :
@@ -3770,6 +3780,23 @@ static void modal_label(Ed *ed, u16 y, u16 x, u16 width,
                        style->chip_fg, style->chip_bg, style->attrs);
 }
 
+static size_t modal_help_span(const char *text, size_t at, u16 width,
+                              size_t *len)
+{
+    size_t end = at;
+    int cells;
+
+    while (text[end] != '\0' && text[end] != '\n')
+        end++;
+    *len = yew_str_clip((const u8 *)text + at, end - at, width, &cells);
+    if (*len == 0U && end != at)
+        *len = yew_gb_next_bytes((const u8 *)text, strlen(text), at) - at;
+    at += *len;
+    if (text[at] == '\n')
+        at++;
+    return at;
+}
+
 void yew_cmdline_draw_modal(Ed *ed)
 {
     CmdLine *line;
@@ -3786,6 +3813,10 @@ void yew_cmdline_draw_modal(Ed *ed)
     u16 x;
     CCol caret;
     Span selection = {0U, 0U};
+    u32 help_lines = 0U;
+    u16 help_rows;
+    size_t help_at = 0U;
+    size_t help_len;
 
     if (ed == NULL || !ed->cmdline.active || !ed->cmdline.modal ||
         ed->grid.rows == 0U || ed->grid.cols == 0U)
@@ -3813,7 +3844,19 @@ void yew_cmdline_draw_modal(Ed *ed)
     }
     if (width > ed->grid.cols - (ed->grid.cols > 4U ? 4U : 0U))
         width = (u16)(ed->grid.cols - (ed->grid.cols > 4U ? 4U : 0U));
-    height = rows > 16U ? 21U : (u16)(rows + 5U);
+    while (width > 4U && line->modal_help[help_at] != '\0' && help_lines < 1024U) {
+        help_at = modal_help_span(line->modal_help, help_at,
+                                  (u16)(width - 4U), &help_len);
+        help_lines++;
+    }
+    help_rows = ed->grid.rows / 3U > 4U ? 4U : (u16)(ed->grid.rows / 3U);
+    if (help_rows > help_lines)
+        help_rows = (u16)help_lines;
+    if (help_rows == 0U)
+        help_rows = 1U;
+    if (line->modal_help_top + help_rows > help_lines)
+        line->modal_help_top = help_lines > help_rows ? help_lines - help_rows : 0U;
+    height = (u16)((rows > 16U ? 16U : rows) + help_rows + 4U);
     if (height > ed->grid.rows - (ed->grid.rows > 8U ? 4U : 0U))
         height = (u16)(ed->grid.rows - (ed->grid.rows > 8U ? 4U : 0U));
     box = (Rect){(u16)((ed->grid.cols - width) / 2U),
@@ -3851,14 +3894,33 @@ void yew_cmdline_draw_modal(Ed *ed)
     }
     modal_label(ed, box.y, (u16)(box.x + 2U), (u16)(box.w - 4U),
                  line->modal_title, &style);
-    modal_label(ed, (u16)(box.y + 1U), (u16)(box.x + 2U),
-                 (u16)(box.w - 4U), line->modal_help, &style);
+    if (help_rows > box.h - 4U)
+        help_rows = (u16)(box.h - 4U);
+    help_at = 0U;
+    for (i = 0U; i < line->modal_help_top + help_rows &&
+                  line->modal_help[help_at] != '\0'; i++) {
+        size_t next = modal_help_span(line->modal_help, help_at,
+                                       (u16)(box.w - 4U), &help_len);
+
+        if (i >= line->modal_help_top) {
+            int cells;
+            size_t clipped = yew_str_clip((const u8 *)line->modal_help + help_at,
+                                           help_len, box.w - 4U, &cells);
+
+            (void)yew_grid_puts(&ed->grid,
+                (u16)(box.y + 1U + i - line->modal_help_top),
+                (u16)(box.x + 2U), (const u8 *)line->modal_help + help_at,
+                clipped, style.chip_fg, style.chip_bg, style.attrs);
+        }
+        help_at = next;
+    }
     modal_label(ed, (u16)(box.y + box.h - 2U), (u16)(box.x + 2U),
-                 (u16)(box.w - 4U), line->multiline ?
+                 (u16)(box.w - 4U), help_lines > help_rows ?
+                 "PgUp/PgDn details | Ctrl-S accept | Esc cancel" : line->multiline ?
                  "Ctrl-S accept | Enter newline | Esc cancel" :
                  "Enter / Ctrl-S accept | Esc cancel", &style);
-    input = (Rect){(u16)(box.x + 2U), (u16)(box.y + 2U),
-                    (u16)(box.w - 4U), (u16)(box.h - 4U)};
+    input = (Rect){(u16)(box.x + 2U), (u16)(box.y + 1U + help_rows),
+                    (u16)(box.w - 4U), (u16)(box.h - 3U - help_rows)};
     line->modal_input = input;
     if (cursor_row < line->modal_top)
         line->modal_top = cursor_row;

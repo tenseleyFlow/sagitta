@@ -2894,6 +2894,8 @@ void yew_mouse_event(Ed *ed, const Key *k)
             if (line >= lines)
                 line = lines - 1U;
             span = yew_textbuf_line_span(target->buf->tb, (LineNo){line});
+            if (line + 1U < lines && span.hi > span.lo)
+                span.hi--; /* The newline is not a clickable text cell. */
             cursor->pos = yew_ccol_to_off(target->buf->tb, span,
                 (CCol){ed->cmdline.modal_left + k->col - input.x},
                 target->buf->tabwidth);

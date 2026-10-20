@@ -521,6 +521,38 @@ void test_cmdline_modal_owns_input_and_preserves_document(void)
     YEW_ASSERT_EQ_MEM(state.text, "first\nsecond\nbody", 17U);
     YEW_ASSERT(ed->win == origin);
     YEW_ASSERT_EQ_U64(yew_textbuf_len(origin->buf->tb), 0U);
+    YEW_ASSERT(yew_grid_resize(&ed->grid, 24U, 80U));
+    yew_cmdline_open_modal(ed, "Unicode message", "Private selection",
+                           "a\xcc\x81\xe6\xbc\xa2", true, input_done, &state);
+    key = cmdline_key(YEW_KEY_LEFT);
+    yew_ed_handle_key(ed, key, 5);
+    YEW_ASSERT_EQ_U64(ed->cmdline.cur.pos.v, 3U);
+    key.mods = YEW_MOD_SHIFT;
+    yew_ed_handle_key(ed, key, 6);
+    YEW_ASSERT_EQ_U64(ed->cmdline.cur.pos.v, 0U);
+    YEW_ASSERT_EQ_U64(ed->cmdline.cur.anchor.v, 3U);
+    yew_cmdline_paste(ed, (const u8 *)"Q", 1U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed->cmdline.buf), 4U);
+    key = cmdline_key('z');
+    key.mods = YEW_MOD_CTRL;
+    yew_ed_handle_key(ed, key, 7);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed->cmdline.buf), 6U);
+    yew_cmdline_draw_modal(ed);
+    key = (Key){0};
+    key.kind = YEW_EV_MOUSE;
+    key.ev = YEW_KEY_PRESS;
+    key.button = YEW_MB_LEFT;
+    key.row = ed->cmdline.modal_input.y;
+    key.col = ed->cmdline.modal_input.x;
+    yew_mouse_event(ed, &key);
+    YEW_ASSERT_EQ_U64(ed->cmdline.cur.pos.v, 0U);
+    key.row = 0U;
+    key.col = 0U;
+    yew_mouse_event(ed, &key);
+    YEW_ASSERT(ed->cmdline.modal && ed->win == origin);
+    YEW_ASSERT_EQ_U64(ed->cmdline.cur.pos.v, 0U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(origin->buf->tb), 0U);
+    yew_cmdline_close(ed, false);
     yew_grid_free(&ed->grid);
     cmdline_fixture_free(&fixture);
 }
