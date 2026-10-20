@@ -65,6 +65,11 @@ typedef struct Tab {
      * restore, and never again.
      */
     bool missing_at_restore;
+    /* Output views own a tab, never a document's pane. Origin is an ID
+     * because closing/reordering other tabs must not change its meaning. */
+    bool transient;
+    bool return_fuss;
+    u32 return_tab_id;
 } Tab;
 
 VEC_DECL(TabVec, Tab);
@@ -125,6 +130,8 @@ int yew_tab_open(Ed *ed, const char *path);
 /* Sprint 57.31: a new untitled tab showing the existing `buf`; -1 when
  * refused (the message says why). */
 int yew_tab_open_buffer(Ed *ed, Buffer *buf);
+int yew_tab_open_transient(Ed *ed, Buffer *buf);
+bool yew_tab_dismiss_transient(Ed *ed);
 /* False when vetoed — a modified tab needs an answer first. */
 bool yew_tab_close(Ed *ed, int idx);
 int yew_tab_index_of_id(const Ed *ed, u32 id);

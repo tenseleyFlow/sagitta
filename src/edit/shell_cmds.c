@@ -280,8 +280,8 @@ CmdStatus yew_job_cmd_jump(CmdCtx *cx)
                 (unsigned)id);
         return YEW_CMD_ERR_STATE;
     }
-    return yew_ed_show_buffer(cx->ed, j->buf) ? YEW_CMD_OK
-                                              : YEW_CMD_ERR_STATE;
+    return yew_tab_open_transient(cx->ed, j->buf) >= 0 ? YEW_CMD_OK
+                                                      : YEW_CMD_ERR_STATE;
 }
 
 CmdStatus yew_job_cmd_clear_finished(CmdCtx *cx)
@@ -300,6 +300,14 @@ CmdStatus yew_job_cmd_clear_finished(CmdCtx *cx)
         /* Drop the output buffer with the job: keeping it would leave
          * scratch buffers nobody can reach from the table. */
         if (j->buf != NULL) {
+            size_t tab = ed->tabs.v.len;
+
+            while (tab != 0U) {
+                Tab *view = &ed->tabs.v.data[--tab];
+
+                if (view->transient && view->buffer_id == j->buf->id)
+                    (void)yew_tab_close(ed, (int)tab);
+            }
             yew_ws_scratch_drop(ed, j->buf);
             j->buf = NULL;
         }

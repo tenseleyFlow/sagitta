@@ -264,6 +264,14 @@ void yew_job_finish(Ed *ed, YewJob *j)
     /* "Command produced no output": a full-screen empty buffer after every
      * :!make is the most-hated behavior of every editor that skips this. */
     if (j->bytes_out + j->bytes_err == 0U) {
+        size_t i = ed->tabs.v.len;
+
+        while (i != 0U) {
+            Tab *tab = &ed->tabs.v.data[--i];
+
+            if (tab->transient && tab->buffer_id == j->buf->id)
+                (void)yew_tab_close(ed, (int)i);
+        }
         if (ed->win != NULL && ed->win->buf == j->buf) {
             Buffer *origin = yew_ws_buf_by_id(ed, j->origin_buf_id);
 
@@ -781,7 +789,7 @@ u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
                            : 0U;
     (void)snprintf(name, sizeof(name), "*job:%u %s*", (unsigned)id,
                    cmdline);
-    buf = yew_ws_scratch_new(ed, name, YEW_BUF_NOUNDO);
+    buf = yew_ws_scratch_new(ed, name, YEW_BUF_NOUNDO | YEW_BUF_READONLY);
     if (buf == NULL) {
         (void)yew_job_signal(ed, id, SIGTERM);
         (void)snprintf(err, errsz, "cannot create job buffer");
@@ -789,7 +797,7 @@ u32 yew_shell_run(Ed *ed, const char *cmdline, bool focus, char *err,
     }
     j->buf = buf;
     if (focus)
-        (void)yew_ed_show_buffer(ed, buf);
+        (void)yew_tab_open_transient(ed, buf);
     if (alongside)
         yew_msg(ed, YEW_MSG_INFO,
                 "session busy: ran outside it (a cd here will not persist)");
@@ -802,6 +810,8 @@ bool yew_shell_dismiss_output(Ed *ed)
     Buffer *target = NULL;
     u32 i;
 
+    if (yew_tab_dismiss_transient(ed))
+        return true;
     if (ed == NULL || ed->win == NULL || ed->win->buf == NULL)
         return false;
     focused = ed->win->buf;
@@ -1149,11 +1159,12 @@ Buffer *yew_jobs_table_open(Ed *ed)
         return NULL;
     b = yew_ws_scratch_find(ed, YEW_JOBS_TABLE_NAME);
     if (b == NULL)
-        b = yew_ws_scratch_new(ed, YEW_JOBS_TABLE_NAME, YEW_BUF_NOUNDO);
+        b = yew_ws_scratch_new(ed, YEW_JOBS_TABLE_NAME,
+                              YEW_BUF_NOUNDO | YEW_BUF_READONLY);
     if (b == NULL)
         return NULL;
     jobs_table_render(ed, b);
-    (void)yew_ed_show_buffer(ed, b);
+    (void)yew_tab_open_transient(ed, b);
     return b;
 }
 

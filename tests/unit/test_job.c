@@ -266,6 +266,9 @@ void test_job_output_dismiss_and_quit_restore_dirty_origin(void)
     YEW_ASSERT_EQ_STR(err, "");
     output = ed.win->buf;
     YEW_ASSERT(output != origin);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 2U);
+    YEW_ASSERT(yew_tab_at(&ed, ed.tabs.active)->transient);
+    YEW_ASSERT(yew_tab_buffer(&ed, 0) == origin);
     YEW_ASSERT_NOT_NULL(yew_job_find(&ed, id));
     YEW_ASSERT_EQ_U64(yew_job_find(&ed, id)->origin_buf_id, origin->id);
 
@@ -276,14 +279,19 @@ void test_job_output_dismiss_and_quit_restore_dirty_origin(void)
     YEW_ASSERT(run_to_completion(&ed, id));
 
     /* The retained, completed output obeys the same return contract. */
-    YEW_ASSERT(yew_ed_show_buffer(&ed, output));
+    YEW_ASSERT(yew_tab_open_transient(&ed, output) >= 0);
+    YEW_ASSERT(yew_tab_open_transient(&ed, output) >= 0);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 2U);
+    /* Return uses identity even when the output moves left of its origin. */
+    yew_tab_reorder(&ed, ed.tabs.active, 0);
     YEW_ASSERT(yew_shell_dismiss_output(&ed));
     YEW_ASSERT(ed.win->buf == origin);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 1U);
     YEW_ASSERT(yew_job_find(&ed, id)->buf == output);
 
     cx.ed = &ed;
     cx.win = ed.win;
-    YEW_ASSERT(yew_ed_show_buffer(&ed, output));
+    YEW_ASSERT(yew_tab_open_transient(&ed, output) >= 0);
     YEW_ASSERT_EQ_U64(yew_file_cmd_quit(&cx), YEW_CMD_OK);
     YEW_ASSERT(!ed.quit);
     YEW_ASSERT(ed.win->buf == origin);

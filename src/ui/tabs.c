@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/mode.h"
 #include "edit/shadow.h"
 #include "fl/flruntime.h"
 #include "mod/git/fussmode.h"
@@ -379,6 +380,52 @@ int yew_tab_open_buffer(Ed *ed, Buffer *buf)
  * decided BEFORE the compaction, because after the memmove the index
  * that names the neighbour has already changed meaning.
  */
+int yew_tab_open_transient(Ed *ed, Buffer *buf)
+{
+    Tab *origin;
+    u32 origin_id;
+    bool fuss;
+    int idx;
+    size_t i;
+
+    if (ed == NULL || buf == NULL)
+        return -1;
+    origin = yew_tab_at(ed, ed->tabs.active);
+    origin_id = origin == NULL ? 0U : origin->tab_id;
+    fuss = yew_fuss_active(ed);
+    for (i = 0U; i < ed->tabs.v.len; i++) {
+        Tab *tab = &ed->tabs.v.data[i];
+
+        if (tab->transient && tab->buffer_id == buf->id)
+            break;
+    }
+    idx = i < ed->tabs.v.len ? (int)i : yew_tab_open_buffer(ed, buf);
+    if (idx < 0)
+        return -1;
+    if (!ed->tabs.v.data[idx].transient) {
+        ed->tabs.v.data[idx].transient = true;
+        ed->tabs.v.data[idx].return_tab_id = origin_id;
+        ed->tabs.v.data[idx].return_fuss = fuss;
+    }
+    if (fuss)
+        yew_fuss_mode_leave(ed);
+    if (ed->cmdline.active)
+        ed->cmdline.return_mode = (u8)YEW_MODE_L;
+    else
+        (void)yew_mode_enter(ed, YEW_MODE_L);
+    yew_tab_switch(ed, idx);
+    return idx;
+}
+
+bool yew_tab_dismiss_transient(Ed *ed)
+{
+    Tab *tab = ed == NULL ? NULL : yew_tab_at(ed, ed->tabs.active);
+
+    if (tab == NULL || !tab->transient || ed->tabs.v.len <= 1U)
+        return false;
+    return yew_tab_close(ed, ed->tabs.active);
+}
+
 static u32 pick_survivor_id(const Ed *ed, int idx)
 {
     int active = ed->tabs.active;
@@ -388,6 +435,9 @@ static u32 pick_survivor_id(const Ed *ed, int idx)
         return active >= 0 && active < n
                ? ed->tabs.v.data[active].tab_id
                : 0U;
+    if (ed->tabs.v.data[idx].transient &&
+        yew_tab_index_of_id(ed, ed->tabs.v.data[idx].return_tab_id) >= 0)
+        return ed->tabs.v.data[idx].return_tab_id;
     if (idx + 1 < n)
         return ed->tabs.v.data[idx + 1].tab_id; /* the one to its right */
     if (idx - 1 >= 0)
@@ -398,10 +448,15 @@ static u32 pick_survivor_id(const Ed *ed, int idx)
 bool yew_tab_close(Ed *ed, int idx)
 {
     u32 survivor;
+    bool restore_fuss;
 
     if (ed == NULL || idx < 0 || (size_t)idx >= ed->tabs.v.len)
         return false;
     survivor = pick_survivor_id(ed, idx);
+    restore_fuss = ed->tabs.active == idx &&
+                   ed->tabs.v.data[idx].transient &&
+                   ed->tabs.v.data[idx].return_fuss && survivor != 0U &&
+                   survivor == ed->tabs.v.data[idx].return_tab_id;
     /*
      * Leave the group BEFORE the compaction, while `idx` still names
      * this tab.  Doing it after would compact the ordinals of whichever
@@ -420,6 +475,14 @@ bool yew_tab_close(Ed *ed, int idx)
     if (ed->tabs.active < 0 && ed->tabs.v.len > 0U)
         ed->tabs.active = 0;
     yew_tab_switch(ed, ed->tabs.active);
+    if (restore_fuss) {
+        if (ed->cmdline.active) {
+            (void)yew_fuss_mode_enter(ed);
+            ed->cmdline.return_mode = (u8)YEW_MODE_F;
+        } else {
+            (void)yew_mode_enter(ed, YEW_MODE_F);
+        }
+    }
     yew_fuss_windows_changed(ed);
     yew_state_mark_dirty(ed);
     return true;
