@@ -1,14 +1,20 @@
+#define _POSIX_C_SOURCE 200809L
 /* Sprint 56.5: ghost text composes an insertion preview over drawn cells. */
 #include "harness.h"
 
+#include <fcntl.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/mode.h"
 #include "edit/pane_cmds.h"
 #include "edit/shadow.h"
 #include "term/grid.h"
+#include "term/render.h"
 #include "ui/draw.h"
 #include "ui/glyphs.h"
+#include "ui/layout.h"
 #include "ui/mouse.h"
 #include "ui/region.h"
 #include "ui/shadowdraw.h"
@@ -465,4 +471,70 @@ void test_shadow_draw_provenance_attrs_and_glyphs_are_distinct(void)
     }
     yew_width_set_opts(NULL);
     yew_glyph_reset();
+}
+
+void test_shadow_idle_frames_retain_composition_without_repainting(void)
+{
+    static const u8 document[] = "\t\nreal row\nnext row\n";
+    static const char *const suggestions[] = {"Doc", "Doc\nsecond\nthird"};
+    u32 variant;
+
+    for (variant = 0U; variant < YEW_ARRAY_LEN(suggestions); variant++) {
+        Ed ed;
+        TtyCaps caps = {0};
+        Cell painted[12U * 60U];
+        u32 regions;
+        u32 wake;
+        size_t sentinel = 8U * 60U + 45U;
+        int sink = open("/dev/null", O_WRONLY);
+
+        YEW_ASSERT(sink >= 0);
+        shadow_layout_fixture(&ed, document, sizeof(document) - 1U, 1U,
+                              (Rect){0U, 0U, 60U, 12U});
+        ed.mode = YEW_MODE_I;
+        YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 12U, 60U));
+        ed.grid_ready = true;
+        yew_render_init(&ed.render, &caps, NULL);
+        ed.render_ready = true;
+        ed.tty.wfd = sink;
+        yew_ed_layout(&ed);
+        shadow_layout_suggestion(ed.win, (const u8 *)suggestions[variant],
+                                 (u32)strlen(suggestions[variant]),
+                                 YEW_SHADOW_LSP);
+        yew_ed_render(&ed);
+        regions = yew_region_count();
+        YEW_ASSERT_EQ_U64(ed.win->shadow.vrows, variant == 0U ? 1U : 3U);
+        (void)memcpy(painted, ed.grid.back, sizeof(painted));
+
+        /* A clean wake must not traverse document cells or re-compose a
+         * second ghost over the retained insertion preview.  As with the
+         * relative-gutter regression, this unmarked sentinel detects a
+         * repaint even when the terminal diff would emit zero bytes. */
+        ed.grid.back[sentinel].utf8[0] = (u8)'#';
+        for (wake = 0U; wake < 500U; wake++) {
+            yew_ed_render(&ed);
+            YEW_ASSERT_EQ_U64(ed.grid.back[sentinel].utf8[0], (u8)'#');
+            YEW_ASSERT_EQ_U64(ed.frame.len, 0U);
+            YEW_ASSERT_EQ_U64(yew_region_count(), regions);
+            YEW_ASSERT_EQ_U64(ed.win->shadow.vrows,
+                              variant == 0U ? 1U : 3U);
+        }
+        ed.grid.back[sentinel] = painted[sentinel];
+        YEW_ASSERT_EQ_MEM(ed.grid.back, painted, sizeof(painted));
+
+        /* Real row damage must restore the base before reapplying either
+         * kind of insertion preview; the resulting cells are identical. */
+        yew_ed_damage_rows(&ed, 0U, 1U);
+        yew_ed_render(&ed);
+        YEW_ASSERT_EQ_MEM(ed.grid.back, painted, sizeof(painted));
+        YEW_ASSERT_EQ_U64(yew_region_count(), regions);
+        yew_shadow_dismiss(&ed, ed.win);
+        yew_ed_render(&ed);
+        YEW_ASSERT_EQ_U64(ed.win->shadow.vrows, 0U);
+        YEW_ASSERT(shadow_textbuf_eq(ed.win->buf->tb, document,
+                                    sizeof(document) - 1U));
+        YEW_ASSERT(close(sink) == 0);
+        ed.tty.wfd = -1;
+        yew_ed_free(&ed);
+    }
 }

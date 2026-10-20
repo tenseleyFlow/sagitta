@@ -2708,7 +2708,12 @@ void yew_ed_render(Ed *ed)
         if (yew_win_view_row(win, cursor_line, &row))
             yew_ed_damage_rows(ed, row, (u16)(row + 1U));
     }
-    if (win->shadow.live)
+    /* A retained ghost is already composed into the grid.  Rebuild its
+     * base only when document cells actually changed, not on every timer,
+     * key release or job wake.  Deliver/update/dismiss already request
+     * damage.  Partial document paints still need a full base restoration:
+     * composing over last frame's shifted suffix would duplicate text. */
+    if (win->shadow.live && ed->doc_damage_lo < ed->doc_damage_hi)
         ed->full_damage = true;
     /* After the damage above is derived, so a frame that turned out to
      * owe a repaint is never mistaken for a hover. */
@@ -2750,7 +2755,8 @@ void yew_ed_render(Ed *ed)
         yew_draw_footer(ed, win);
     if (!ed->cmdline.active)
         yew_draw_cursor(ed, win);
-    yew_shadow_draw_panes(ed);
+    if (ed->full_damage || ed->doc_damage_lo < ed->doc_damage_hi)
+        yew_shadow_draw_panes(ed);
 draw_overlays:
     /*
      * Modal pickers draw after the footer, cursor preparation, FUSS drawer,

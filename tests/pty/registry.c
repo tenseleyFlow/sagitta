@@ -8848,6 +8848,50 @@ static void case_s43_shadow_escape_stages(PtyCtx *c)
     (void)unlink(path);
 }
 
+/* Sprint 59.6: navigation alone in Insert must dismiss/rearm a preview,
+ * never move through virtual ghost rows or insert its text into the file. */
+static void case_s43_shadow_lsp_insert_arrows(PtyCtx *c)
+{
+    static const u8 expected[] =
+        "anchorX\nreal row two\nreal row three\nreal row four\n"
+        "real row five\nreal row six\nreal row seven\nreal row eight\n"
+        "real row nine\n";
+    char path[256];
+    u32 cycle;
+
+    if (!s43_open_shadow(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "esc esc");
+    s43_command(c, "set shadow.providers lsp");
+    s18_settle_after_keys(c, "i end");
+    ptc_settle(c, 160);
+    for (cycle = 0U; cycle < 3U && !c->failed; cycle++) {
+        ptc_check(c, s43_screen_contains(&c->vt, "language_server item"),
+                  "LSP preview did not reappear after cursor-only motion");
+        s18_settle_after_keys(c, "left");
+        ptc_check(c, c->vt.cur_r == 1 && c->vt.cur_c == 12,
+                  "Insert left did not move one document character");
+        s18_settle_after_keys(c, "right");
+        ptc_settle(c, 160);
+        ptc_check(c, c->vt.cur_r == 1 && c->vt.cur_c == 13,
+                  "Insert right did not return to the insertion position");
+        s18_settle_after_keys(c, "down");
+        ptc_check(c, c->vt.cur_r == 2,
+                  "Insert down navigated a ghost row instead of the file");
+        s18_settle_after_keys(c, "up");
+        ptc_settle(c, 160);
+        ptc_check(c, c->vt.cur_r == 1 && c->vt.cur_c == 13,
+                  "Insert up did not return to the document cursor");
+    }
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+    s18_settle_after_keys(c, "esc esc s");
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "cursor-only navigation inserted suggestion or key bytes");
+    s43_force_quit(c);
+    (void)unlink(path);
+}
+
 /* ---------------------------------------------------------------- */
 /* Sprint 49: real AI shadow-provider streaming contracts           */
 /* ---------------------------------------------------------------- */
@@ -12843,6 +12887,8 @@ const PtyCase yew_pty_cases[] = {
       case_s43_shadow_accept_word),
     C(s43_shadow_escape_stages, modern, 24U, 80U,
       case_s43_shadow_escape_stages),
+    C(s43_shadow_lsp_insert_arrows, modern, 24U, 80U,
+      case_s43_shadow_lsp_insert_arrows),
     C(s42_5_wolf_dark_truecolor, modern, 24U, 80U,
       case_s42_5_kitchen),
     C(s42_5_wolf_dark_colors_256, modern, 24U, 80U,

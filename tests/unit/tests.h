@@ -3102,6 +3102,7 @@ void test_shadow_layout_clamps_forty_lines_to_eight(void);
 void test_shadow_layout_last_visible_row_and_inline_only_clip(void);
 void test_shadow_draw_overlays_exact_damage_blocks_hits_and_clips(void);
 void test_shadow_draw_provenance_attrs_and_glyphs_are_distinct(void);
+void test_shadow_idle_frames_retain_composition_without_repainting(void);
 void test_shadow_draw_single_line_inserts_before_ascii_suffix(void);
 void test_shadow_draw_moves_wide_suffix_pairs_and_clips_whole_glyphs(void);
 void test_shadow_multiline_midline_layout_paints_nothing(void);
