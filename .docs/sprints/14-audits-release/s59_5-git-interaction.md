@@ -160,7 +160,7 @@ keyboard access, document bytes, cursor state and undo history.
 - [x] Rebase cancel/conflict/continue/abort tests pass without hung helpers.
 - [x] Focused unit, Git-script, PTY and sanitizer checks pass.
 - [x] Help, handoff and evidence reflect shipped behavior and remaining work.
-- [ ] Input-modal visual polish and cross-terminal regression checks pass.
+- [x] Input-modal visual polish and cross-terminal regression checks pass.
 
 Local implementation checkpoint, 2026-10-20 (Apple-silicon macOS; unpushed):
 default and `MODULES=` builds pass. Full units: 3,051 tests, 73,852,198
@@ -176,3 +176,15 @@ because groff is unavailable. The sanitizer runtime requires
 `ASAN_OPTIONS=detect_leaks=0:abort_on_error=1`; this is not LSan evidence.
 No fresh Linux/GCC, hosted CI, Valgrind, performance/size gate or soak signoff
 is claimed here. See `.docs/HANDOFF.md` for the next pickup.
+
+Visual-polish checkpoint, 2026-10-20: `69588251` delivers the continuous
+orange surface, rounded/ASCII corners, title/help/key hierarchy, resize
+padding and contrasting selection. `cmdline` units: 52 tests / 23,118
+assertions; `theme`: 14 / 1,089; `glyphs_`: 9 / 387. All pass, with
+`cmdline` and `glyphs_` also passing ASan/UBSan. The two new modal tests
+cover both built-in themes, four renditions and 2,000 terminal geometries.
+All 41 `fuss_` PTYs pass; the six commit variants and destructive-confirm
+case also pass after the final contrast adjustment. Manual/docs-sync and
+selftests pass. Visual previews derived from actual PTY cells were reviewed
+for dark, light and 16-color layouts. No fresh hosted CI, GCC, performance
+campaign or soak signoff is claimed. Changes remain local and unpushed.

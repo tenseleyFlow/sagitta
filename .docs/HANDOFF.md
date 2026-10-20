@@ -29,6 +29,50 @@ front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
 chapter 1. Git interaction detour 59.5 is implemented below; the current
 user-directed suggestion/navigation investigation is Sprint 59.6.
 
+## Input-modal UI follow-up — 2026-10-20
+
+While the user tries to reproduce the Insert-mode slowdown, Sprint 59.5
+received its requested visual pass: contract `3f9c0f22`, implementation
+`69588251`. The screenshot's patchwork came from using orange status-line
+chip colors for labels/borders but dark-brown row colors for the body.
+Input modals now have one warm background, a dedicated bold title row,
+rounded thin borders, regular-weight body/help, bold key hints and a
+contrasting selection. Padding yields before help/input on small terminals.
+The shared glyph table supplies ASCII/ambiguous-wide fallbacks. Theme roles
+are documented in `docs/manual/10-syntax.md`; normal command bars and
+picker/context-menu behavior are unchanged.
+
+Verification on this Apple-silicon host (two build jobs maximum):
+
+- `make -s -j2 BUILD=build-s59_6 build-s59_6/yew
+  build-s59_6/unit_tests build-s59_6/pty_runner` passes warning-clean.
+- With `YEW_RUNTIME_DIR="$PWD/runtime"`, unit filters `cmdline` (52 tests,
+  23,118 assertions), `theme` (14 / 1,089) and `glyphs_` (9 / 387) pass.
+  The modal sweep exercises 2,000 dimensions and retains private text,
+  visible caret and mouse coordinates. Dark/light surface/selection tests
+  cover truecolor, 256, 16 and monochrome renditions.
+- `BUILD=build-s59_6-san SAN=1` builds; `cmdline` and `glyphs_` filters pass
+  with `ASAN_OPTIONS=detect_leaks=0:abort_on_error=1` and
+  `UBSAN_OPTIONS=halt_on_error=1`. No LSan claim.
+- From `build-s59_6/pty-cwd`, `YEW_PTY_FILTER=fuss_ ../pty_runner --demo
+  ../demo_paint --yew /Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta/build-s59_6/yew`
+  passes all 41 cases, each twice. The six `s59_5_fuss_commit_modal` variants
+  and `fuss_discard_confirmation` were rerun after final color refinement.
+  Document restoration compares all meaningful VT cell fields, excluding
+  unused glyph storage after erase-to-end in NO_COLOR.
+- `make -s -j2 BUILD=build-s59_6 test-docs-sync` and selftest pass. Manual
+  checker/selftest pass from the writable PTY cwd with `YEW_MANUAL_BIN`,
+  `YEW_MANUAL_PTY_RUNNER`, `YEW_MANUAL_DEMO_BIN`, `YEW_MANUAL_BUILD` pointing
+  into `build-s59_6`. The initial root-cwd manual run hit the known
+  root-owned `build/` fixture directory; no permissions were changed.
+
+Nothing pushed or installed; no neighboring worktree, live editor or soak
+was modified. Dogfood from the checkout with
+`YEW_RUNTIME_DIR="$PWD/runtime" ./build-s59_6/yew ~/scratch/wolf/` to load
+the new theme roles rather than an older installed runtime. The severe
+Insert-mode lag remains **unreproduced**, not declared fixed; resume the
+59.6 pickup below when the user's reproduction/profile becomes available.
+
 ## Suggestion/navigation pickup — 2026-10-20
 
 Sprint 59.6 (`14-audits-release/s59_6-shadow-navigation.md`) began on clean
