@@ -113,6 +113,16 @@ keyboard access, document bytes, cursor state and undo history.
    handover. No features or stability protections may be removed to meet
    obsolete size gates.
 
+6. **Input-modal visual polish** (user follow-up, 2026-10-20), in
+   `src/ui/cmdline.c`, the shared glyph table and built-in themes. Use one
+   continuous warm surface instead of mixing status-line row/chip fills.
+   Rounded, cell-measured borders, a dedicated title row, regular-weight
+   input/help and emphasized key hints establish hierarchy without shaded
+   text patches. Theme roles own the colors; ASCII, reduced-color and
+   monochrome terminals retain readable structure. Preserve all input,
+   selection, focus, cancellation and submission semantics. Bound layout
+   work, retain scrolling and keep mouse hit geometry aligned after resize.
+
 ## Testing Strategy
 
 - Unit: stable-ID return after reorder/close, unchanged origin TextBuf,
@@ -132,6 +142,9 @@ keyboard access, document bytes, cursor state and undo history.
   smoke with one worker, never launch competing long campaigns.
 - Regression: warning-clean build, focused unit/script/PTY suites and
   sanitizer coverage. Use at most two build jobs alongside the soak.
+- Visual polish: assert uniform modal backgrounds, typography and bounded
+  resize/caret geometry; review dark/light, ASCII, 16/256-color and NO_COLOR
+  PTY snapshots. Retain commit cancellation/document-restoration checks.
 
 ## Definition of Done
 
@@ -147,6 +160,7 @@ keyboard access, document bytes, cursor state and undo history.
 - [x] Rebase cancel/conflict/continue/abort tests pass without hung helpers.
 - [x] Focused unit, Git-script, PTY and sanitizer checks pass.
 - [x] Help, handoff and evidence reflect shipped behavior and remaining work.
+- [ ] Input-modal visual polish and cross-terminal regression checks pass.
 
 Local implementation checkpoint, 2026-10-20 (Apple-silicon macOS; unpushed):
 default and `MODULES=` builds pass. Full units: 3,051 tests, 73,852,198
