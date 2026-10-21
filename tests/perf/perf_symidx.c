@@ -248,6 +248,29 @@ static bool write_walk_fixture(const char *root)
         if (fclose(fp) != 0)
             return false;
     }
+    {
+        char path[256];
+        static const char text[] = "alpha beta gamma \x1b delta e\xCC\x81 ";
+        FILE *fp;
+        u32 part;
+        int n = snprintf(path, sizeof(path), "%s/mixed-longline.txt", root);
+
+        if (n <= 0 || (size_t)n >= sizeof(path))
+            return false;
+        fp = fopen(path, "wb");
+        if (fp == NULL)
+            return false;
+        /* Below the existing line-size cap: this must be indexed, not
+         * skipped, and a budget must be honored within the long line. */
+        for (part = 0U; part < 700U; part++) {
+            if (fwrite(text, 1U, sizeof(text) - 1U, fp) != sizeof(text) - 1U) {
+                (void)fclose(fp);
+                return false;
+            }
+        }
+        if (fclose(fp) != 0)
+            return false;
+    }
     return true;
 }
 
@@ -269,6 +292,13 @@ static void remove_walk_fixture(const char *root)
         if (n > 0 && (size_t)n < sizeof(path))
             (void)unlink(path);
     }
+    {
+        char path[256];
+        int n = snprintf(path, sizeof(path), "%s/mixed-longline.txt", root);
+
+        if (n > 0 && (size_t)n < sizeof(path))
+            (void)unlink(path);
+    }
     (void)rmdir(root);
 }
 
@@ -283,6 +313,7 @@ static bool measure_walk_typing(Timing *typing_out, Timing *pump_out)
     u32 count = 0U;
     u64 tail_max = 0U;
     bool opened = false;
+    bool mixed_scanned = false;
     bool ok = false;
 
     if (bytes == NULL || samples == NULL || pump_samples == NULL ||
@@ -338,8 +369,15 @@ static bool measure_walk_typing(Timing *typing_out, Timing *pump_out)
         if (elapsed > tail_max)
             tail_max = elapsed;
     }
-    if (count == 0U ||
-        ed.ws.sym_walk.files_done != SYMIDX_WALK_FILES + 1U ||
+    for (size_t i = 0U; i < ed.ws.sym_ws.e.len; i++) {
+        const SymEntry *entry = &ed.ws.sym_ws.e.data[i];
+        const char *name = yew_intern_str(&ed.interner, entry->name);
+
+        if (name != NULL && strcmp(name, "alpha") == 0 && entry->hits == 700U)
+            mixed_scanned = true;
+    }
+    if (count == 0U || !mixed_scanned ||
+        ed.ws.sym_walk.files_done != SYMIDX_WALK_FILES + 2U ||
         ed.ws.sym_walk.bytes_read == 0U || !drain_index(&ed))
         goto done_ed;
     summarize(samples, count, typing_out);

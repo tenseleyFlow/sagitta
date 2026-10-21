@@ -61,6 +61,21 @@ measure editor input response separately from completion response time.
    the report not reproduced in `.docs/HANDOFF.md` and this contract.
    No feature removals, unrelated redesigns or automatic pushes.
 
+4. **Captured background-index stall follow-up (2026-10-21).** The user's
+   FUSS-scroll sample (`/tmp/yew-git-lag-stack.txt`) spends 1344 of 5471
+   main-thread samples in `yew_symwalk_pump`, primarily repeated grapheme
+   boundary validation inside symbol extraction. Reproduce the scan using
+   read-only workspace input, then remove repeated line-prefix work in the
+   owning Unicode/indexing code. Preserve UAX #29 behavior, malformed-byte
+   handling, all completion providers and existing indexing limits. Test
+   long mixed-text lines and checkpoint/edit boundaries, and measure the
+   longest cooperative indexing step rather than only total throughput.
+   Workspace scans must yield between word units within a long line,
+   retaining resume offsets, syntax state, caps, insertion order, hit counts
+   and the batch's recency tick; cancellation/reindex discards continuation.
+   Keep the earlier commit-modal and Insert-mode stalls unconfirmed unless
+   their own reproduction/evidence establishes the connection.
+
 ## Testing Strategy
 
 - Unit: all three marker bytes/attributes; ASCII and Unicode modes;
@@ -84,6 +99,10 @@ measure editor input response separately from completion response time.
 - [x] No unbounded memory/request/region growth in the bounded reproduction.
 - [x] Warning-clean build and focused ASan/UBSan checks pass.
 - [x] Handoff distinguishes verified fixes from unreplicated symptoms.
+- [x] Capture/reproduce the FUSS background-index stall and repair its
+      quadratic boundary checks and whole-line budget overrun.
+- [x] Forced-yield extraction, Unicode/edit boundaries, bounded fuzz,
+      long-line performance and pause-and-scroll PTY regressions pass.
 - [ ] Capture and resolve the reported severe Insert-mode stall itself.
 
 Checkpoint: markers and redundant-redraw repair are implemented, **not a
@@ -92,3 +111,15 @@ repeatedly displays `Doc` at the reported location but remains responsive
 in both Line and Insert modes. See `.docs/HANDOFF.md` for exact bounded
 measurements, tests, build paths and the live-profile pickup. The user's
 terminal/Herdr path has not been covered by the direct-PTY probe.
+
+2026-10-21 follow-up: the user's sample and read-only replay identified
+workspace symbol indexing, not Wolf LSP, as the captured FUSS slowdown.
+Existing exact Unicode checkpoints and an adjacent-ASCII/CRLF fast path
+remove repeated line-prefix scans; the workspace scanner now yields between
+words and retains its recency tick. All 69,995 workspace entries survive.
+Pause-and-scroll PTY worst arrow: 2149.97 ms installed versus 1.409 ms patched.
+`perf_cursor` and the expanded `perf_symidx` pass unchanged budgets; focused
+Clang/GCC/sanitizer units, commit-modal PTYs and bounded symbol fuzz pass.
+The original Insert-mode and commit-modal symptoms remain field-confirmation
+items, not claims made from this FUSS reproduction. See handoff for exact
+commands/builds, samples, resource bounds and the separate 59.8 pickup.

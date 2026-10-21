@@ -182,6 +182,17 @@ u32 yew_symidx_scan(SymIndex *idx, Buffer *buf, Span range);
 /* Workspace scans use buf_id 0 even when their bytes come from an open
  * buffer.  This is the save-time and background-walk tier boundary. */
 u32 yew_symidx_scan_workspace(SymIndex *idx, Buffer *buf, Span range);
+typedef struct SymScanCursor {
+    ByteOff next;
+    u32 tick;
+} SymScanCursor;
+
+/* Resume an immutable workspace range at cursor->next (initially range.lo).
+ * stop_us is an absolute CLOCK_MONOTONIC deadline, zero for unbudgeted.
+ * Yield between word units, preserving the range's single recency tick.
+ * On completion/cap, cursor->next == range.hi. Reset on source replacement. */
+u32 yew_symidx_scan_workspace_step(SymIndex *idx, Buffer *buf, Span range,
+                                  SymScanCursor *cursor, i64 stop_us);
 void yew_symidx_workspace_replace(Workspace *ws, Buffer *buf);
 /* Resident bytes the whole symbol system owns: every index, the per-buffer
  * dirty tables, the query scratch, and the names it added to the editor's

@@ -53,6 +53,8 @@ typedef struct SymWalk {
     u64 scan_at;
     u64 scan_line_bytes;
     u64 scan_line;
+    u64 scan_resume;
+    u32 scan_tick;
     u32 scan_symbols;
     size_t queue_at;
     size_t git_at;

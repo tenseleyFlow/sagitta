@@ -8,6 +8,8 @@
 #include "text/cursor.h"
 #include "text/piece.h"
 #include "unicode/coords.h"
+#include "unicode/grapheme.h"
+#include "unicode/utf8.h"
 
 void test_coords_display_ordinal_is_one_based_without_overflow(void)
 {
@@ -680,6 +682,102 @@ void test_coords_deferred_index_keeps_line_local_motion_local(void)
     YEW_ASSERT_EQ_U64(yew_gcol_to_off(tb, line, (GCol){25U}).v,
                       line.lo + 25U);
     YEW_ASSERT(!tb->graphemes.initialized);
+    YEW_ASSERT(yew_is_grapheme_boundary(tb, BYTEOFF(line.lo + 25U)));
+    YEW_ASSERT(!tb->graphemes.initialized);
     yew_textbuf_free(tb);
+}
+
+static void coords_check_boundaries(const TextBuf *tb, const u8 *bytes,
+                                     size_t len)
+{
+    YewGbState state;
+    size_t at = 0U;
+
+    yew_gb_init(&state);
+    while (at < len) {
+        u32 cp;
+        size_t used = yew_utf8_decode(bytes + at, len - at, &cp);
+        bool boundary = yew_gb_boundary(&state, cp);
+        size_t i;
+
+        YEW_ASSERT(used != 0U && used <= len - at);
+        YEW_ASSERT(yew_is_grapheme_boundary(tb, BYTEOFF(at)) == boundary);
+        for (i = 1U; i < used; i++)
+            YEW_ASSERT(!yew_is_grapheme_boundary(tb, BYTEOFF(at + i)));
+        at += used;
+    }
+    YEW_ASSERT(yew_is_grapheme_boundary(tb, BYTEOFF(len)));
+    YEW_ASSERT(!yew_is_grapheme_boundary(tb, BYTEOFF(len + 1U)));
+}
+
+void test_coords_boundary_ascii_pairs_in_mixed_buffer(void)
+{
+    size_t len = 128U * 128U * 3U + 2U;
+    u8 *bytes = yew_xmalloc(len);
+    TextBuf *tb;
+    size_t at = 0U;
+    unsigned left;
+    unsigned right;
+
+    /* Include every control pair, especially CR/LF, with a non-ASCII
+     * suffix so the whole-buffer simple-ASCII shortcut cannot mask bugs. */
+    for (left = 0U; left < 128U; left++) {
+        for (right = 0U; right < 128U; right++) {
+            bytes[at++] = (u8)left;
+            bytes[at++] = (u8)right;
+            bytes[at++] = ' ';
+        }
+    }
+    bytes[at++] = 0xCCU;
+    bytes[at++] = 0x81U;
+    YEW_ASSERT_EQ_U64(at, len);
+    tb = yew_textbuf_from_bytes(bytes, len);
+    coords_check_boundaries(tb, bytes, len);
+    yew_textbuf_free(tb);
+    yew_xfree(bytes);
+}
+
+void test_coords_boundary_checkpoints_match_stream_after_edits(void)
+{
+    static const u8 pattern[] =
+        "alpha e\xCC\x81 \xD8\x80" "b " /* Extend and Prepend. */
+        "\xF0\x9F\x87\xA6\xF0\x9F\x87\xA7\xF0\x9F\x87\xA8 "
+        "\xF0\x9F\x91\xA9\xE2\x80\x8D\xF0\x9F\x92\xBB "
+        "\xE0\xA4\x95\xE0\xA5\x8D\xE0\xA4\x95 "
+        "\xE1\x84\x80\xE1\x85\xA1\xE1\x86\xA8 "
+        "\xFF\x80\xC0\xE2\x82 \r\n";
+    const size_t repeated = 96U * (sizeof(pattern) - 1U);
+    const size_t len = repeated + 4097U;
+    u8 *bytes = yew_xmalloc(len);
+    TextBuf *tb;
+    size_t at;
+
+    for (at = 0U; at < repeated; at += sizeof(pattern) - 1U)
+        (void)memcpy(bytes + at, pattern, sizeof(pattern) - 1U);
+    bytes[at++] = 'a';
+    /* One cluster crosses multiple motion checkpoints. */
+    while (at < len) {
+        bytes[at++] = 0xCCU;
+        bytes[at++] = 0x81U;
+    }
+    tb = yew_textbuf_from_bytes(bytes, len);
+    coords_check_boundaries(tb, bytes, len);
+    yew_textbuf_free(tb);
+
+    tb = yew_textbuf_new();
+    /* Fragment codepoints across piece edges and leave pending edits. */
+    for (at = 0U; at < len;) {
+        size_t take = len - at < 97U ? len - at : 97U;
+
+        yew_textbuf_insert(tb, BYTEOFF(at), bytes + at, take);
+        at += take;
+    }
+    coords_check_boundaries(tb, bytes, len);
+    /* Change context and check invalid UTF-8 near a checkpoint. */
+    yew_textbuf_delete(tb, (Span){509U, 517U});
+    (void)memmove(bytes + 509U, bytes + 517U, len - 517U);
+    coords_check_boundaries(tb, bytes, len - 8U);
+    yew_textbuf_free(tb);
+    yew_xfree(bytes);
 }
 

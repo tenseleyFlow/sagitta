@@ -27,10 +27,73 @@ The product code used by the soak remains the exact hosted-green anchor.
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
 chapter 1. Git interaction detour 59.5 is implemented below; the current
-suggestion/navigation investigation is Sprint 59.6 (severe stall still
-unreproduced). User-directed FUSS file diff detour 59.7 is implemented;
+suggestion/navigation investigation is Sprint 59.6 (captured background-index
+stall repaired below; original Insert-mode symptom awaits field confirmation).
+User-directed FUSS file diff detour 59.7 is implemented;
 interactive merge resolution 59.8 is in progress (parser/matching foundation
 implemented; editor actions and merge workspace not yet available).
+
+## Captured FUSS/background indexing stall — 2026-10-21
+
+The user's `/tmp/yew-git-lag-stack.txt` captured the installed editor while
+FUSS scrolling lagged: 1344/5471 samples were in workspace indexing, mostly
+`word_span -> yew_is_grapheme_boundary`, versus 3994 idle `poll` samples.
+RSS was 22.3 MB, not evidence of an allocation leak. The earlier profiler's
+multi-second **input-free dispatch** frames fit this synchronous work; they
+were not proof that the Git child or modal renderer was slow.
+
+Root cause: mixed/control-byte lines lost the whole-buffer ASCII shortcut;
+each word's boundary validation rescanned the line prefix. The workspace
+budget was checked only after four whole lines. Saved terminal transcripts
+and diffs under `~/scratch/wolf/pax-*/rehearsal/` reproduced 1.2–2.4 s
+chunks; `pax-shell/rehearsal/diff.out` reached 6.178 s. Files below the
+existing size caps still triggered quadratic work.
+
+Repair: exact adjacent-ASCII/CRLF boundary checks plus existing streaming
+Unicode checkpoints; deferred large-file indexes stay deferred. Workspace
+extraction now yields within a line between word units, resuming without
+duplicating symbols or changing syntax filtering, caps or recency ticks.
+No provider, file type or editor feature was removed; no latency gate was
+relaxed. The owning contract is Sprint 59.6 deliverable 4.
+
+Measured on this arm64 Mac (local evidence, not cross-platform CI):
+
+- Read-only complete workspace replay: 1163 files, **69,995 entries both
+  before and after**. Original 38.425 s / worst pump 6.178 s; repaired
+  initial repeat 4.364 s / worst pump 2.292 ms. Filesystem/scheduling tails
+  are not a hard real-time guarantee: a later complete repeat was 4.293 s,
+  with a 7.739 ms maximum while starting another file, still 69,995 entries.
+- Bounded PTY, isolated state, FUSS arrows with 900 ms pauses so the 250 ms
+  background-idle grace actually expires: installed build 59 arrows,
+  worst **2149.97 ms**; patched build 61 arrows, worst **1.409 ms**.
+  Patched RSS 20,816 KiB. Rapid 90 ms arrows alone suppress workspace work
+  and did **not** reproduce this bug. Do not use that as a negative control
+  for indexing cost. Probe artifacts live in ignored `build-s59_6/`;
+  the useful profiles are `yew-s596-fuss-1gz9_1wh/profile.txt` (before)
+  and `yew-s596-fuss-g6frzxde/profile.txt` (after) under the host temp dir.
+- Permanent `perf_cursor --boundary-only`: old 64 KiB control-text case
+  359,833 us / regression; repaired 3–5 us. Mixed Unicode 445–544 us.
+  Full cursor suite passes, including 8 MiB context/edit cases. The
+  workspace perf fixture now includes a long mixed/control-text line and
+  verifies it was indexed; observed max pump 1.959 ms against unchanged
+  2 ms gate.
+
+Verified: warning-clean Clang/GCC 16 full builds and module-stripped build;
+coords/symidx/symwalk units on Clang, GCC and ASan/UBSan; word/grapheme
+units and Unicode corpora on Clang and ASan/UBSan; six commit-modal PTY
+variants. New deterministic slice tests compare entries, counts, caps and
+recency across forced yields and interleaved ticks. The extended symbol
+fuzzer compares sliced/whole scans, including partial byte ranges. One
+ASan/UBSan process, seed 596, 1000 iterations passed in 3.96 s, maximum
+RSS 426,229,760 bytes (`detect_leaks=0`, no LSan claim). No new soak or
+parallel fuzz campaign. All probe children were stopped.
+
+Dogfood `./build-s59_6/yew ~/scratch/wolf/`; installed `/usr/local/bin/yew`
+has **not** been replaced. No push, live workspace edits, Git mutations in
+the scratch workspace, Wolf changes, or adjacent-worktree changes. The
+earlier commit-modal and Insert-mode lag may share this cause but still
+need field confirmation. Resume the unfinished 59.8 merge workspace next,
+then ordinary-diff layout review; neither was silently marked complete.
 
 ## Merge-resolution implementation pickup — 2026-10-21
 

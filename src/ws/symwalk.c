@@ -309,6 +309,8 @@ static void scan_file_end(Ed *ed)
     sw->scan_at = 0U;
     sw->scan_line_bytes = 0U;
     sw->scan_line = 0U;
+    sw->scan_resume = 0U;
+    sw->scan_tick = 0U;
     sw->scan_symbols = 0U;
     sw->scan_bound = false;
 }
@@ -345,6 +347,8 @@ static bool scan_file_begin(Ed *ed, const char *path)
     sw->scan_at = 0U;
     sw->scan_line_bytes = 0U;
     sw->scan_line = 0U;
+    sw->scan_resume = 0U;
+    sw->scan_tick = 0U;
     sw->scan_symbols = 0U;
     sw->scan_bound = false;
     return true;
@@ -422,7 +426,7 @@ static bool scan_file_prepare_chunk(Ed *ed)
     return true;
 }
 
-static void scan_file_chunk(Ed *ed)
+static void scan_file_chunk(Ed *ed, i64 stop_us)
 {
     SymWalk *sw = &ed->ws.sym_walk;
     Buffer *buf = sw->scan_buf;
@@ -431,6 +435,7 @@ static void scan_file_chunk(Ed *ed)
     Span first_span;
     Span last_span;
     u32 remaining;
+    SymScanCursor cursor;
 
     if (buf == NULL)
         return;
@@ -442,9 +447,15 @@ static void scan_file_chunk(Ed *ed)
     last_span = yew_textbuf_line_span(buf->tb, LINENO(last - 1U));
     remaining = YEW_SYMWALK_MAX_SYMS_PER_FILE - sw->scan_symbols;
     ed->ws.sym_ws.scan_limit = remaining;
-    sw->scan_symbols += yew_symidx_scan_workspace(
-        &ed->ws.sym_ws, buf, (Span){first_span.lo, last_span.hi});
+    cursor = (SymScanCursor){BYTEOFF(sw->scan_resume), sw->scan_tick};
+    sw->scan_symbols += yew_symidx_scan_workspace_step(
+        &ed->ws.sym_ws, buf, (Span){first_span.lo, last_span.hi},
+        &cursor, stop_us);
     ed->ws.sym_ws.scan_limit = 0U;
+    sw->scan_resume = cursor.next.v;
+    sw->scan_tick = cursor.tick;
+    if (cursor.next.v < last_span.hi)
+        return;
     sw->scan_line = last;
     if (last == lines ||
         sw->scan_symbols >= YEW_SYMWALK_MAX_SYMS_PER_FILE)
@@ -525,9 +536,9 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
 
         if (budget_us > 0)
             remaining -= symwalk_now_us() - started;
-        /* Both the directory walker and a line chunk check their clocks
-         * cooperatively.  Leave one worst-case chunk of headroom so their
-         * final unit of work cannot consume the event-loop deadline. */
+        /* Both directory discovery and word extraction check their clocks
+         * cooperatively. Leave headroom for their final unit of work so it
+         * does not consume the event-loop deadline. */
         if (remaining > YEW_SYMWALK_HEADROOM_US)
             remaining -= YEW_SYMWALK_HEADROOM_US;
         if (remaining < 1 && budget_us > 0)
@@ -569,7 +580,7 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
                 break;
             continue;
         }
-        scan_file_chunk(ed);
+        scan_file_chunk(ed, stop_us);
         if (sw->scan_buf == NULL)
             sw->files_done++;
         if (stop_us != 0 && symwalk_now_us() >= stop_us)

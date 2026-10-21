@@ -2,6 +2,8 @@
 
 #include "perf_policy.h"
 #include "text/cursor.h"
+#include "unicode/grapheme.h"
+#include "unicode/utf8.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -816,6 +818,82 @@ fail:
     return false;
 }
 
+static bool measure_boundary_checks(void)
+{
+    static const u8 ascii_control[] = "alpha beta\x1b ";
+    static const u8 mixed[] = "alpha e\xCC\x81 \xF0\x9F\x87\xA6";
+    const PerfCase cases[] = {
+        {"boundary-ascii-control", ascii_control, sizeof(ascii_control) - 1U},
+        {"boundary-mixed", mixed, sizeof(mixed) - 1U}
+    };
+    const i64 budget_ns = INT64_C(5000000);
+    size_t c;
+
+    for (c = 0U; c < YEW_ARRAY_LEN(cases); c++) {
+        const PerfCase *pc = &cases[c];
+        size_t len = (64U * 1024U / pc->pattern_len) * pc->pattern_len;
+        u8 *bytes = malloc(len);
+        bool *expected = calloc(len + 1U, sizeof(*expected));
+        TextBuf *tb;
+        YewGbState state;
+        size_t at;
+        i64 worst = 0;
+        unsigned round;
+        bool ok = true;
+
+        if (bytes == NULL || expected == NULL) {
+            free(bytes);
+            free(expected);
+            return false;
+        }
+        for (at = 0U; at < len; at += pc->pattern_len)
+            memcpy(bytes + at, pc->pattern, pc->pattern_len);
+        yew_gb_init(&state);
+        for (at = 0U; at < len;) {
+            u32 cp;
+            size_t used = yew_utf8_decode(bytes + at, len - at, &cp);
+
+            if (used == 0U) {
+                free(bytes);
+                free(expected);
+                return false;
+            }
+            expected[at] = yew_gb_boundary(&state, cp);
+            at += used;
+        }
+        expected[len] = true;
+        tb = yew_textbuf_from_owned_bytes(bytes, len);
+        for (round = 0U; round < PERF_ROUNDS; round++) {
+            i64 start = now_ns();
+            i64 elapsed;
+
+            /* A bounded indexing-sized batch, late in a long line. The
+             * old implementation rescanned the prefix for every query. */
+            for (at = len - 128U; at < len; at++) {
+                bool boundary = yew_is_grapheme_boundary(tb, BYTEOFF(at));
+
+                if (boundary != expected[at])
+                    ok = false;
+                perf_cursor_sink += boundary;
+            }
+            elapsed = now_ns() - start;
+            if (start < 0 || elapsed < 0)
+                ok = false;
+            if (elapsed > worst)
+                worst = elapsed;
+        }
+        printf("cursor-perf: case=%s bytes=%zu queries=128 "
+               "worst_us=%lld budget_us=5000%s\n", pc->name, len,
+               (long long)(worst / INT64_C(1000)),
+               timing_verdict(worst, budget_ns));
+        yew_textbuf_free(tb);
+        free(expected);
+        if (!ok || timing_failed(worst, budget_ns))
+            return false;
+    }
+    return true;
+}
+
 static int selftest_policy(void)
 {
     const uint64_t budget = UINT64_C(5000000);
@@ -849,8 +927,11 @@ int main(int argc, char **argv)
 
     if (argc == 2 && strcmp(argv[1], "--selftest-policy") == 0)
         return selftest_policy();
+    if (argc == 2 && strcmp(argv[1], "--boundary-only") == 0)
+        return measure_boundary_checks() ? 0 : 1;
     if (argc != 1) {
-        (void)fprintf(stderr, "usage: %s [--selftest-policy]\n", argv[0]);
+        (void)fprintf(stderr, "usage: %s [--selftest-policy|--boundary-only]\n",
+                      argv[0]);
         return 2;
     }
 
@@ -872,6 +953,8 @@ int main(int argc, char **argv)
     if (!measure_giant_cluster_midpoint_edit())
         passed = false;
     if (!measure_contextual_reverse())
+        passed = false;
+    if (!measure_boundary_checks())
         passed = false;
     return passed ? 0 : 1;
 }

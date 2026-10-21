@@ -912,7 +912,8 @@ static bool symidx_add(SymIndex *idx, const u8 *name, u32 len, u32 buf_id,
 }
 
 static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
-                              u32 source_id)
+                              u32 source_id, SymScanCursor *cursor,
+                              i64 stop_us)
 {
     UnitCtx unit;
     SynSpan *spans;
@@ -930,6 +931,9 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
     u32 previous_nitems = 0U;
     u64 previous_len = 0U;
     bool previous_valid = false;
+    bool progressed = false;
+    ByteOff *next = cursor == NULL ? NULL : &cursor->next;
+    u32 tick;
 
     if (idx == NULL || buf == NULL || buf->tb == NULL || buf->meta.binary ||
         idx->intern == NULL)
@@ -945,13 +949,23 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
         file = yew_intern_cstr(idx->intern, buf->meta.realpath);
     else if (buf->path != NULL)
         file = yew_intern_cstr(idx->intern, buf->path);
-    if (idx->tick == UINT32_MAX)
-        idx->tick = 1U;
-    else
-        idx->tick++;
+    if (next != NULL && (next->v < range.lo || next->v > range.hi))
+        YEW_BUG("symbol index: resume outside scan range");
+    if (next == NULL || next->v == range.lo) {
+        if (idx->tick == UINT32_MAX)
+            idx->tick = 1U;
+        else
+            idx->tick++;
+        if (cursor != NULL)
+            cursor->tick = idx->tick;
+    }
+    tick = cursor == NULL ? idx->tick : cursor->tick;
     if (range.lo == range.hi)
         return 0U;
-    first = yew_textbuf_line_of(buf->tb, BYTEOFF(range.lo));
+    if (next != NULL && next->v == range.hi)
+        return 0U;
+    first = yew_textbuf_line_of(buf->tb,
+                               next == NULL ? BYTEOFF(range.lo) : *next);
     last = yew_textbuf_line_of(buf->tb, BYTEOFF(range.hi - 1U));
     spans = yew_xcalloc(YEW_SYN_MAX_SPANS, sizeof(*spans));
     previous_spans = yew_xcalloc(YEW_SYN_MAX_SPANS,
@@ -967,10 +981,18 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
         u64 line_len = line.hi - line.lo;
         bool line_cached = line_len <= sizeof(line_bytes);
         bool whole_line = range.lo <= line.lo && range.hi >= line.hi;
-        bool cacheable = line_cached && whole_line;
+        bool cacheable = line_cached && whole_line &&
+                         (next == NULL || next->v <= line.lo);
         bool repeated;
         u32 line_items = 0U;
 
+        if (next != NULL && next->v > at)
+            at = next->v;
+        if (next != NULL && progressed && stop_us != 0 &&
+            sym_now_us() >= stop_us) {
+            next->v = at < range.hi ? at : range.hi;
+            goto done;
+        }
         if (line_cached && line_len != 0U)
             line_cached = text_copy(buf->tb, line, line_bytes);
 
@@ -998,12 +1020,13 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
                 if (!symidx_add(idx, line_bytes + cached->lo, cached->len,
                                 source_id, file, line.lo + cached->lo,
                                 (u32)line_no, cached->kind, cached->flags,
-                                idx->tick, true))
+                                tick, true))
                     break;
                 count++;
                 if (idx->scan_limit != 0U && count >= idx->scan_limit)
                     break;
             }
+            progressed = true;
             if (idx->capped ||
                 (idx->scan_limit != 0U && count >= idx->scan_limit))
                 break;
@@ -1021,6 +1044,15 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
             u8 flags;
             bool copied;
 
+            /* The time budget must be checked within long lines, not
+             * just after a four-line batch. Finish a whole word unit so
+             * resumption cannot split an identifier or count it twice. */
+            if (next != NULL && progressed && stop_us != 0 &&
+                sym_now_us() >= stop_us) {
+                next->v = at < range.hi ? at : range.hi;
+                goto done;
+            }
+            progressed = true;
             /* Identifier extraction still uses the word UnitOps for every
              * possible identifier.  Cheaply step over ASCII bytes that
              * cannot begin one so punctuation and whitespace do not each
@@ -1072,7 +1104,7 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
             else
                 infer_kind(buf, line, word, attr, &kind, &flags);
             if (!symidx_add(idx, token, (u32)len, source_id, file, word.lo,
-                            (u32)line_no, kind, flags, idx->tick, true))
+                            (u32)line_no, kind, flags, tick, true))
                 break;
             if (cacheable && line_items < SYM_LINE_CACHE_ITEMS) {
                 previous_items[line_items++] =
@@ -1101,6 +1133,9 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
             line_no == UINT64_MAX)
             break;
     }
+    if (next != NULL)
+        next->v = range.hi;
+done:
     yew_xfree(previous_spans);
     yew_xfree(spans);
     return count;
@@ -1109,12 +1144,20 @@ static u32 symidx_scan_source(SymIndex *idx, Buffer *buf, Span range,
 u32 yew_symidx_scan(SymIndex *idx, Buffer *buf, Span range)
 {
     return symidx_scan_source(idx, buf, range,
-                              buf == NULL ? 0U : buf->id);
+                              buf == NULL ? 0U : buf->id, NULL, 0);
 }
 
 u32 yew_symidx_scan_workspace(SymIndex *idx, Buffer *buf, Span range)
 {
-    return symidx_scan_source(idx, buf, range, 0U);
+    return symidx_scan_source(idx, buf, range, 0U, NULL, 0);
+}
+
+u32 yew_symidx_scan_workspace_step(SymIndex *idx, Buffer *buf, Span range,
+                                  SymScanCursor *cursor, i64 stop_us)
+{
+    if (cursor == NULL)
+        YEW_BUG("symbol index: missing scan resume offset");
+    return symidx_scan_source(idx, buf, range, 0U, cursor, stop_us);
 }
 
 static SymBufIndex *symbuf_find(Workspace *ws, u32 buf_id)

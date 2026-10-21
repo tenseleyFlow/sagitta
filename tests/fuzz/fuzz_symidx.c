@@ -219,6 +219,77 @@ done:
     return ok;
 }
 
+static bool check_workspace_slices(const u8 *data, size_t len,
+                                    char *why, size_t why_cap)
+{
+    Arena arena;
+    Interner intern;
+    Buffer buf = {0};
+    SymIndex whole;
+    SymIndex sliced;
+    SymScanCursor cursor = {BYTEOFF(0U), 0U};
+    Span range = {0U, len};
+    u32 expected;
+    u32 count = 0U;
+    u32 cap = len == 0U || (data[0] & 1U) == 0U ? 0U : 3U;
+    size_t steps = 0U;
+    size_t i;
+    bool ok = true;
+
+    if (len > 2U && (data[0] & 2U) != 0U) {
+        range.lo = data[1] % (len + 1U);
+        range.hi = range.lo + data[2] % (len - range.lo + 1U);
+        cursor.next = BYTEOFF(range.lo);
+    }
+    arena_init(&arena);
+    interner_init(&intern, &arena);
+    buf.tb = yew_textbuf_from_bytes(data, len);
+    yew_syn_buf_init(&buf.syn);
+    yew_syn_attach(&buf.syn, YEW_LANG_NONE, buf.tb);
+    yew_symidx_init(&whole, &intern);
+    yew_symidx_init(&sliced, &intern);
+    whole.scan_limit = cap;
+    expected = yew_symidx_scan_workspace(&whole, &buf, range);
+    do {
+        u64 before = cursor.next.v;
+
+        sliced.scan_limit = cap == 0U ? 0U : cap - count;
+        count += yew_symidx_scan_workspace_step(
+            &sliced, &buf, range, &cursor, 1);
+        steps++;
+        if ((cursor.next.v <= before && cursor.next.v != range.hi) ||
+            cursor.next.v > range.hi || steps > len + 1U) {
+            ok = fail(why, why_cap, "workspace slice did not progress");
+            goto done;
+        }
+    } while (cursor.next.v < range.hi);
+    if (count != expected || whole.e.len != sliced.e.len ||
+        whole.tick != sliced.tick) {
+        ok = fail(why, why_cap, "workspace slice count or tick changed");
+        goto done;
+    }
+    for (i = 0U; i < whole.e.len; i++) {
+        const SymEntry *a = &whole.e.data[i];
+        const SymEntry *b = &sliced.e.data[i];
+
+        if (a->name != b->name || a->buf_id != b->buf_id ||
+            a->file != b->file || a->off != b->off || a->line != b->line ||
+            a->hits != b->hits || a->kind != b->kind || a->flags != b->flags ||
+            whole.updated.data[i] != sliced.updated.data[i]) {
+            ok = fail(why, why_cap, "workspace slice changed an entry");
+            goto done;
+        }
+    }
+done:
+    yew_symidx_free(&sliced);
+    yew_symidx_free(&whole);
+    yew_syn_detach(&buf.syn);
+    yew_textbuf_free(buf.tb);
+    interner_free(&intern);
+    arena_free_all(&arena);
+    return ok;
+}
+
 static bool check_symidx(const u8 *data, size_t len,
                          char *why, size_t why_cap)
 {
@@ -231,7 +302,7 @@ static bool check_symidx(const u8 *data, size_t len,
         return false;
     if (first.hash != second.hash || first.results != second.results)
         return fail(why, why_cap, "same input produced different hit order");
-    return true;
+    return check_workspace_slices(data, len, why, why_cap);
 }
 
 static bool check_large_single_line(const u8 *bytes, size_t len,

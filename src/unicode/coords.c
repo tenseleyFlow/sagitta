@@ -1645,10 +1645,14 @@ ByteOff yew_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
 
 bool yew_is_grapheme_boundary(const TextBuf *tb, ByteOff pos)
 {
-    ClusterReader reader;
-    StreamCluster cluster;
+    TextReader reader;
+    StreamCp cp;
+    YewGbState gb;
     Span span;
+    u64 start;
     u64 len;
+    u8 left;
+    u8 right;
 
     if (tb == NULL)
         YEW_BUG("yew_is_grapheme_boundary: NULL text buffer");
@@ -1659,18 +1663,45 @@ bool yew_is_grapheme_boundary(const TextBuf *tb, ByteOff pos)
         return true;
     if (pos.v == 0U || pos.v == len)
         return true;
+    /* Two adjacent ASCII codepoints always break except CR x LF. This
+     * remains exact in a mixed/edited buffer, without settling its index.
+     * In particular, one control byte must not turn every identifier in
+     * an otherwise ASCII line into a scan from the start of that line. */
+    reader_init(&reader, tb, pos.v - 1U, pos.v + 1U);
+    if (!reader_get(&reader, &left) || !reader_get(&reader, &right))
+        YEW_BUG("yew_is_grapheme_boundary: cannot inspect adjacent bytes");
+    if (left < 0x80U && right < 0x80U)
+        return left != '\r' || right != '\n';
     span = motion_span(tb, pos, false);
     if (pos.v == span.lo)
         return true;
-    cluster_reader_init(&reader, tb, span.lo, span.hi);
-    while (cluster_next(&reader, &cluster, false)) {
-        if (pos.v == cluster.end) {
-            cluster_reader_free(&reader);
-            return true;
+    start = span.lo;
+    yew_gb_init(&gb);
+    /* Reuse the exact streaming state at a codepoint checkpoint, which
+     * may itself be inside a cluster. Do not build a deferred whole-file
+     * index merely to answer a line-local query. */
+    if (tb->graphemes.initialized) {
+        const YewGraphemeIndex *index = coords_index(tb);
+        size_t first = motion_lower_bound_off(index, span.lo);
+        size_t after = motion_upper_bound_off(index, pos.v);
+
+        if (after > first) {
+            const YewGraphemeMotionCheckpoint *checkpoint =
+                &index->motion[after - 1U];
+
+            start = checkpoint->off;
+            gb.prev_gcb = checkpoint->prev_gcb;
+            gb.flags = checkpoint->flags;
         }
-        if (pos.v < cluster.end)
-            break;
     }
-    cluster_reader_free(&reader);
-    return false;
+    reader_init(&reader, tb, start, span.hi);
+    while (reader_cp(&reader, &cp)) {
+        bool boundary = yew_gb_boundary(&gb, cp.cp);
+
+        if (cp.start == pos.v)
+            return boundary;
+        if (cp.end > pos.v)
+            return false; /* Interior byte of a valid UTF-8 codepoint. */
+    }
+    YEW_BUG("yew_is_grapheme_boundary: scan ended before offset");
 }

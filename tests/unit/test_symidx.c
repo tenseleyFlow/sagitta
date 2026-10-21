@@ -236,6 +236,80 @@ void test_symidx_plain_text_is_syntax_superset(void)
     fixture_free(&syntax, true);
 }
 
+void test_symidx_workspace_slices_preserve_entries_caps_and_recency(void)
+{
+    static const u8 pattern[] =
+        "alpha beta a\xCC\x81" "bc 123abc don't \xFF delta \x1b ";
+    static const u8 tail[] =
+        "\nstruct TypeName\nalpha beta\nalpha beta\n"
+        "// hiddenComment\n\"hiddenString\" omega\n";
+    const size_t repeated = 200U * (sizeof(pattern) - 1U);
+    const size_t len = repeated + sizeof(tail) - 1U;
+    u8 *bytes = yew_xmalloc(len);
+    unsigned variant;
+    size_t at;
+
+    for (at = 0U; at < repeated; at += sizeof(pattern) - 1U)
+        (void)memcpy(bytes + at, pattern, sizeof(pattern) - 1U);
+    (void)memcpy(bytes + repeated, tail, sizeof(tail) - 1U);
+    for (variant = 0U; variant < 4U; variant++) {
+        bool syntax = (variant & 1U) != 0U;
+        u32 cap = (variant & 2U) != 0U ? 17U : 0U;
+        SymFixture whole;
+        SymFixture sliced;
+        SymScanCursor cursor = {BYTEOFF(0U), 0U};
+        u32 expected;
+        u32 count = 0U;
+        size_t steps = 0U;
+        size_t i;
+
+        fixture_init(&whole, bytes, len, syntax);
+        fixture_init(&sliced, bytes, len, syntax);
+        whole.idx.scan_limit = cap;
+        expected = yew_symidx_scan_workspace(&whole.idx, &whole.buf,
+                                              (Span){0U, len});
+        while (cursor.next.v < len && steps++ < len) {
+            u64 before = cursor.next.v;
+
+            sliced.idx.scan_limit = cap == 0U ? 0U : cap - count;
+            /* An expired absolute deadline forces deterministic yields
+             * after one unit, independent of host speed. */
+            count += yew_symidx_scan_workspace_step(
+                &sliced.idx, &sliced.buf, (Span){0U, len}, &cursor, 1);
+            YEW_ASSERT(cursor.next.v > before);
+            if (steps == 1U)
+                sliced.idx.tick++; /* Another file update between turns. */
+            YEW_ASSERT_EQ_U64(cursor.tick, whole.idx.tick);
+        }
+        YEW_ASSERT_EQ_U64(cursor.next.v, len);
+        YEW_ASSERT(steps > 1U && steps < len);
+        YEW_ASSERT_EQ_U64(count, expected);
+        YEW_ASSERT_EQ_U64(sliced.idx.tick, whole.idx.tick + 1U);
+        YEW_ASSERT_EQ_U64(sliced.idx.e.len, whole.idx.e.len);
+        for (i = 0U; i < whole.idx.e.len; i++) {
+            const SymEntry *a = &whole.idx.e.data[i];
+            const SymEntry *b = &sliced.idx.e.data[i];
+
+            YEW_ASSERT(strcmp(yew_intern_str(&whole.intern, a->name),
+                              yew_intern_str(&sliced.intern, b->name)) == 0);
+            YEW_ASSERT_EQ_U64(a->buf_id, b->buf_id);
+            YEW_ASSERT_EQ_U64(a->file, b->file);
+            YEW_ASSERT_EQ_U64(a->off, b->off);
+            YEW_ASSERT_EQ_U64(a->line, b->line);
+            YEW_ASSERT_EQ_U64(a->hits, b->hits);
+            YEW_ASSERT_EQ_U64(a->kind, b->kind);
+            YEW_ASSERT_EQ_U64(a->flags, b->flags);
+            YEW_ASSERT_EQ_U64(whole.idx.updated.data[i],
+                              sliced.idx.updated.data[i]);
+        }
+        YEW_ASSERT_EQ_U64(yew_symidx_scan_workspace_step(
+            &sliced.idx, &sliced.buf, (Span){0U, len}, &cursor, 0), 0U);
+        fixture_free(&sliced, syntax);
+        fixture_free(&whole, syntax);
+    }
+    yew_xfree(bytes);
+}
+
 void test_symidx_real_c_highlighter_filters_comments_and_strings(void)
 {
     static const u8 text[] =
