@@ -878,6 +878,16 @@ the marker is chrome, never document bytes. See
 `14-audits-release/s59_6-shadow-navigation.md` for the cursor-latency repair
 contract. Existing providers and latency gates are not removed or relaxed.
 
+**File diff amendment S59.7-A1 (2026-10-20).** FUSS Alt+d opens a
+read-only full-context unified file comparison in a temporary tab, with
+old/new source numbers and addition/deletion row roles, instead of a raw
+patch transcript. It compares saved worktree content to HEAD (incoming
+retains merge-base-to-upstream semantics); document Alt+D's existing
+index/live-buffer side-by-side view is unchanged. Sprint 59.7 owns the
+implementation and tests. Interactive conflict resolution remains deferred
+to a separately contracted Sprint 59.8; this view never accepts or stages
+merge choices. The independent Sprint 59 soak is unchanged.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never
