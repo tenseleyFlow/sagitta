@@ -8,6 +8,7 @@
 
 #include "mod/git/gutter.h"
 #include "mod/git/diffview.h"
+#include "mod/git/conflict.h"
 
 enum { GIT_DIFF_FUZZ_MAX_LINES = 64 };
 
@@ -199,6 +200,129 @@ static bool check_unified(const u8 *data, size_t len)
     return ok;
 }
 
+static u8 conflict_byte(const u8 *data, size_t len, size_t at)
+{
+    return len == 0U ? 0U : data[at % len];
+}
+
+static bool check_conflict_match(const u8 *data, size_t len)
+{
+    Bytebuf source = {0}, arm = {0};
+    u8 source_lines[32], arm_lines[16];
+    size_t offsets[33] = {0};
+    size_t sn = conflict_byte(data, len, 0U) % 33U;
+    size_t an = conflict_byte(data, len, 1U) % 17U;
+    size_t i, j, hits = 0U, hit = 0U, steps = 0U;
+    GitConflictMatch *work;
+    GitConflictParseResult result;
+    Span span;
+    bool missing, ok;
+
+    for (i = 0U; i < sn; i++) {
+        u8 byte = conflict_byte(data, len, i + 2U);
+        source_lines[i] = byte & 3U;
+        bytebuf_push_u8(&source, (u8)('a' + source_lines[i]));
+        if (i + 1U != sn || (byte & 16U) == 0U)
+            bytebuf_append(&source, byte & 4U ? "\r\n" : "\n",
+                             byte & 4U ? 2U : 1U);
+        offsets[i + 1U] = source.len;
+    }
+    for (i = 0U; i < an; i++) {
+        u8 byte = conflict_byte(data, len, i + 7U);
+        arm_lines[i] = byte & 3U;
+        bytebuf_push_u8(&arm, (u8)('a' + arm_lines[i]));
+        bytebuf_append(&arm, byte & 8U ? "\r\n" : "\n", byte & 8U ? 2U : 1U);
+    }
+    if (an == 0U)
+        hits = 1U;
+    else if (an <= sn)
+        for (i = 0U; i <= sn - an; i++) {
+            for (j = 0U; j < an && source_lines[i + j] == arm_lines[j]; j++)
+                ;
+            if (j == an) {
+                hits++;
+                hit = i;
+            }
+        }
+    work = yew_git_conflict_match_new(source.data, source.len, arm.data, arm.len);
+    do {
+        result = yew_git_conflict_match_step(work,
+            1U + conflict_byte(data, len, 2U) % 17U);
+    } while (result == YEW_CONFLICT_PENDING && ++steps < 10000U);
+    ok = (result == YEW_CONFLICT_OK) == (hits == 1U) &&
+         result != YEW_CONFLICT_PENDING;
+    if (hits == 1U) {
+        ok = ok && yew_git_conflict_match_span(work, &span, &missing) &&
+             span.lo == offsets[hit] && span.hi == offsets[hit + an] &&
+             missing == (an != 0U && hit + an == sn &&
+                          source.data[source.len - 1U] != '\n');
+    }
+    yew_git_conflict_match_free(work);
+    bytebuf_free(&source);
+    bytebuf_free(&arm);
+    return ok;
+}
+
+static void conflict_marker(Bytebuf *b, u8 c, u32 width, bool crlf)
+{
+    u32 i;
+    for (i = 0U; i < width; i++)
+        bytebuf_push_u8(b, c);
+    bytebuf_append(b, crlf ? "\r\n" : "\n", crlf ? 2U : 1U);
+}
+
+static bool check_conflict_choices(const u8 *data, size_t len)
+{
+    Bytebuf text = {0}, current = {0}, incoming = {0}, out = {0};
+    GitConflictParse p = {0};
+    u32 width = 3U + conflict_byte(data, len, 0U) % 12U;
+    bool crlf = (conflict_byte(data, len, 1U) & 1U) != 0U;
+    size_t i, n = conflict_byte(data, len, 2U) % 64U;
+    bool ok;
+    for (i = 0U; i < n; i++) {
+        bytebuf_push_u8(&current, (u8)('a' + conflict_byte(data, len, i) % 26U));
+        bytebuf_push_u8(&incoming, (u8)('A' + conflict_byte(data, len, i) % 26U));
+    }
+    if (n != 0U) {
+        bytebuf_append(&current, crlf ? "\r\n" : "\n", crlf ? 2U : 1U);
+        bytebuf_append(&incoming, crlf ? "\r\n" : "\n", crlf ? 2U : 1U);
+    }
+    conflict_marker(&text, '<', width, crlf);
+    bytebuf_append(&text, current.data, current.len);
+    if (conflict_byte(data, len, 3U) & 1U) {
+        conflict_marker(&text, '|', width, crlf);
+        bytebuf_append(&text, "base\n", 5U);
+    }
+    conflict_marker(&text, '=', width, crlf);
+    bytebuf_append(&text, incoming.data, incoming.len);
+    conflict_marker(&text, '>', width, crlf);
+    yew_git_conflict_parse_start(&p, text.data, text.len, width);
+    while (yew_git_conflict_parse_step(&p, 1U) == YEW_CONFLICT_PENDING)
+        ;
+    ok = p.result == YEW_CONFLICT_OK && p.ranges.len == 1U;
+    for (i = 0U; ok && i < 3U; i++) {
+        Bytebuf expected = {0};
+        if (i != YEW_CONFLICT_INCOMING)
+            bytebuf_append(&expected, current.data, current.len);
+        if (i != YEW_CONFLICT_CURRENT)
+            bytebuf_append(&expected, incoming.data, incoming.len);
+        ok = yew_git_conflict_choice(&out, text.data, text.len, &p.ranges.data[0],
+                                     (GitConflictChoice)i, crlf) &&
+             out.len == expected.len && (out.len == 0U ||
+             memcmp(out.data, expected.data, out.len) == 0);
+        bytebuf_free(&expected);
+    }
+    text.data[conflict_byte(data, len, 4U) % text.len] = 0U;
+    yew_git_conflict_parse_start(&p, text.data, text.len, width);
+    ok = ok && yew_git_conflict_parse_step(&p, SIZE_MAX) != YEW_CONFLICT_OK;
+    yew_git_conflict_parse_drop(&p);
+    bytebuf_free(&text);
+    bytebuf_free(&current);
+    bytebuf_free(&incoming);
+    bytebuf_free(&out);
+    return ok;
+}
+
 static bool check_git_diff(const u8 *data, size_t len,
                            char *why, size_t why_cap)
 {
@@ -211,6 +335,38 @@ static bool check_git_diff(const u8 *data, size_t len,
     GitHunkVec first = {0};
     GitHunkVec second = {0};
     bool ok;
+
+    if (!check_conflict_match(data, len) || !check_conflict_choices(data, len)) {
+        (void)snprintf(why, why_cap, "conflict match/choice oracle mismatch");
+        return false;
+    }
+
+    {
+        GitConflictParse a = {0}, b = {0};
+        size_t i;
+        yew_git_conflict_parse_start(&a, data, len, 0U);
+        yew_git_conflict_parse_start(&b, data, len, 0U);
+        while (yew_git_conflict_parse_step(&a, 17U) == YEW_CONFLICT_PENDING)
+            ;
+        (void)yew_git_conflict_parse_step(&b, SIZE_MAX);
+        ok = a.result == b.result && a.ranges.len == b.ranges.len;
+        for (i = 0U; ok && i < a.ranges.len; i++) {
+            const GitConflictRange *r = &a.ranges.data[i];
+            ok = r->envelope.lo <= r->current.lo &&
+                 r->current.lo <= r->current.hi &&
+                 r->current.hi <= r->incoming.lo &&
+                 r->incoming.lo <= r->incoming.hi &&
+                 r->incoming.hi <= r->envelope.hi && r->envelope.hi <= len &&
+                 r->envelope.lo == b.ranges.data[i].envelope.lo &&
+                 r->envelope.hi == b.ranges.data[i].envelope.hi;
+        }
+        yew_git_conflict_parse_drop(&a);
+        yew_git_conflict_parse_drop(&b);
+        if (!ok) {
+            (void)snprintf(why, why_cap, "conflict parse/resumption mismatch");
+            return false;
+        }
+    }
 
     if (!check_unified(data, len)) {
         (void)snprintf(why, why_cap, "unified projection or atomic failure mismatch");

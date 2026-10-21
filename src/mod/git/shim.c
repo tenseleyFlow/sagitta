@@ -535,6 +535,17 @@ u32 yew_git_head_blob(Ed *ed, const char *path, void *owner,
     return 0U;
 }
 
+u32 yew_git_oid_blob(Ed *ed, const char *oid, void *owner,
+                     YewGitBlobFn callback, char *err, size_t errsz)
+{
+    (void)ed;
+    (void)oid;
+    (void)owner;
+    (void)callback;
+    (void)yew_mod_require(YEW_MOD_FUSS, err, errsz);
+    return 0U;
+}
+
 bool yew_git_test_blob_batch_open(Ed *ed)
 {
     (void)ed;

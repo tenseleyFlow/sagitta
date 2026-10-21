@@ -812,6 +812,7 @@ void test_gitcache_blob_batch_parser_handles_split_binary_and_missing(void)
     u32 first;
     u32 second;
     u32 third;
+    u32 fourth;
     size_t i;
 
     (void)memset(&ed, 0, sizeof(ed));
@@ -827,6 +828,16 @@ void test_gitcache_blob_batch_parser_handles_split_binary_and_missing(void)
     tx_len = yew_git_test_blob_batch_tx(&ed, &tx);
     YEW_ASSERT_EQ_U64(tx_len, 29U);
     YEW_ASSERT_EQ_MEM(tx, ":- odd:name\n:gone\nHEAD:empty\n", tx_len);
+    YEW_ASSERT_EQ_U64(yew_git_oid_blob(&ed, "HEAD:path", &capture,
+        gitcache_blob_capture, err, sizeof(err)), 0U);
+    YEW_ASSERT(strstr(err, "object ID") != NULL);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_batch_tx(&ed, &tx), tx_len);
+    fourth = yew_git_oid_blob(&ed, oid, &capture,
+                              gitcache_blob_capture, err, sizeof(err));
+    YEW_ASSERT(fourth != 0U);
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_batch_tx(&ed, &tx), tx_len + 41U);
+    YEW_ASSERT_EQ_MEM(tx + tx_len, oid, 40U);
+    YEW_ASSERT(tx[tx_len + 40U] == '\n');
 
     bytebuf_init(&response);
     bytebuf_append(&response, oid, sizeof(oid) - 1U);
@@ -836,9 +847,13 @@ void test_gitcache_blob_batch_parser_handles_split_binary_and_missing(void)
     bytebuf_append(&response, ":gone missing\n", 14U);
     bytebuf_append(&response, oid, sizeof(oid) - 1U);
     bytebuf_append(&response, " blob 0\n\n", 9U);
+    bytebuf_append(&response, oid, sizeof(oid) - 1U);
+    bytebuf_append(&response, " blob 5\n", 8U);
+    bytebuf_append(&response, body, sizeof(body));
+    bytebuf_push_u8(&response, '\n');
     for (i = 0U; i < response.len; i++)
         YEW_ASSERT(yew_git_test_blob_batch_feed(&ed, response.data + i, 1U));
-    YEW_ASSERT_EQ_U64(capture.calls, 3U);
+    YEW_ASSERT_EQ_U64(capture.calls, 4U);
     YEW_ASSERT(capture.state[0] == YEW_GIT_BLOB_OK);
     YEW_ASSERT(capture.state[1] == YEW_GIT_BLOB_MISSING);
     YEW_ASSERT(capture.state[2] == YEW_GIT_BLOB_OK);
@@ -848,7 +863,10 @@ void test_gitcache_blob_batch_parser_handles_split_binary_and_missing(void)
     YEW_ASSERT_EQ_U64(capture.len[0], sizeof(body));
     YEW_ASSERT_EQ_MEM(capture.bytes[0], body, sizeof(body));
     YEW_ASSERT_EQ_U64(capture.len[2], 0U);
-    YEW_ASSERT_EQ_U64(yew_git_test_blob_request_count(&ed), 3U);
+    YEW_ASSERT_EQ_U64(capture.request_id[3], fourth);
+    YEW_ASSERT(capture.state[3] == YEW_GIT_BLOB_OK);
+    YEW_ASSERT_EQ_MEM(capture.bytes[3], body, sizeof(body));
+    YEW_ASSERT_EQ_U64(yew_git_test_blob_request_count(&ed), 4U);
     YEW_ASSERT_EQ_U64(yew_git_test_blob_spawn_count(&ed), 0U);
     bytebuf_free(&response);
     yew_git_state_free(&ed);

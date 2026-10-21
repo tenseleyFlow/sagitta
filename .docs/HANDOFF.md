@@ -29,9 +29,45 @@ front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
 chapter 1. Git interaction detour 59.5 is implemented below; the current
 suggestion/navigation investigation is Sprint 59.6 (severe stall still
 unreproduced). User-directed FUSS file diff detour 59.7 is implemented;
-interactive merge resolution is planned separately as 59.8, not implemented.
+interactive merge resolution 59.8 is in progress (parser/matching foundation
+implemented; editor actions and merge workspace not yet available).
 
-## Merge-resolution planning pickup — 2026-10-21
+## Merge-resolution implementation pickup — 2026-10-21
+
+**User-directed queue (2026-10-21):** finish 59.8 first, then investigate
+basic FUSS commit lag, then revisit ordinary 59.7 file-diff presentation
+against open-source editor references (including VS Code). The current
+old/new gutters belong to a unified diff, not two visible source panes.
+Evaluate side-by-side versus inline deliberately; do not conflate this
+follow-up with the three-pane merge workspace. Profiling capture:
+`YEW_PROF=1 yew <workspace>`, `:prof.reset` immediately before the slow
+operation, `:prof.dump /tmp/yew-git-lag-profile.txt` immediately after it.
+Separate modal opening/typing/submission delay from child-Git completion.
+
+**59.8 foundation:** S59.8-A1 now authorizes the scoped text-resolution
+surface. `conflict.[ch]` implements bounded, resumable marker parsing,
+literal NUL-framed unmerged-index parsing, byte-exact arm extraction and
+unique source-arm matching. LF/CRLF, BOM, diff3, custom marker widths,
+empty arms, missing final LF and ambiguous matches have fixtures. Long
+marker lines, byte comparisons and repetitive matching fallback steps
+yield; hashes only reject, and successful matches require exact bytes.
+The async batch transport accepts captured full object IDs, avoiding
+mutable path lookups and line-framing ambiguity in filenames.
+
+Verified locally: Clang and GCC 16 full builds, module-stripped build;
+10 conflict unit tests / 2,253 assertions on Clang, GCC and ASan/UBSan;
+37 Git cache/transport tests / 7,933 assertions on Clang and ASan/UBSan.
+Single-process sanitizer fuzz, seed 598 / 5,000 iterations, passes with
+generated valid marker/choice cases, malformed inputs and a small brute-force
+matching oracle; maximum RSS 76,677,120 bytes (0.40 s wall time here).
+Sanitizer commands use `detect_leaks=0`; no LSan or UI-latency claim.
+
+**Next:** asynchronous snapshot acquisition/revalidation with stable owner
+identities and stale-data tests, then undoable application, dedicated
+three-pane/compact UI and lifecycle tests, then foreground Git integration.
+No acceptance handlers or bindings have been enabled by this foundation.
+Do not mistake parser extraction tests for editor undo/save coverage.
+No push, install, soak reset or adjacent-worktree changes.
 
 At the user's request, inspected local
 `~/GithubOrgs/FortranGoingOnForty/fit` at
@@ -52,12 +88,10 @@ changes. Leave preserves the result; save/stage/continue stay explicit.
 Proposed keys preserve existing actions: FUSS Alt+e opens resolution;
 L/W/B Alt+e prefixes the merge commands. No keybindings ship in this commit.
 
-Next implementation order: scoped decision amendment plus pure parser
-tests; snapshots/revalidation and undoable choices; three-pane/compact UI
-and lifecycle tests; foreground Git integration and regression evidence.
-The existing post-1.0 refusal remains until implementation explicitly
-amends S59-A30 and Sprint 53. No source/runtime changes, push, install,
-soak reset or adjacent-worktree changes belong to this planning pass.
+The following evidence belongs to the earlier **planning-only** checkpoint,
+not the implementation foundation above. The existing refusal commands
+remain until the corresponding editor handlers are ready; S59.8-A1 has now
+superseded the old permanent deferral for the scoped surface.
 Planning checks: `git diff --check` and
 `make -s -j2 BUILD=build-s59_6 test-docs-sync` pass, including the docs-sync
 selftest. No product tests or live merge UI are claimed for this docs-only

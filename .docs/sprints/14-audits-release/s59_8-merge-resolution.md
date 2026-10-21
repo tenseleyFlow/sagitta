@@ -1,4 +1,4 @@
-# Sprint 59.8: Interactive merge resolution — planned, not implemented
+# Sprint 59.8: Interactive merge resolution — implementation in progress
 
 ## Prerequisites
 
@@ -395,3 +395,18 @@ Update `docs/manual/13-git.md` only with shipped behavior and limitations.
     synchronous Git/full-file scan occurs on cursor/draw paths.
 12. Manual and handoff distinguish implemented, unsupported and outstanding
     evidence. No current-code CI/soak success is inferred from an older SHA.
+
+## Implementation checkpoint — 2026-10-21
+
+Delivery step 1 is implemented: S59.8-A1, pure index/marker parsers,
+byte-preserving choice extraction, resumable unique stage-arm matching and
+an immutable-OID entry point on the existing asynchronous blob transport.
+Clang/GCC/stripped builds and focused unit/sanitizer/fuzz evidence are in
+`HANDOFF.md`. Extraction is not editor application: undo, stale identity,
+snapshot ownership, all workspace UI and foreground integration remain
+outstanding. Existing refusal commands are still the shipped behavior.
+
+User follow-up order: complete this sprint detour, investigate basic FUSS
+commit lag, then evaluate ordinary file-diff layout against VS Code and
+other open-source editors. Do not silently change the ordinary diff as
+part of this merge workspace implementation.

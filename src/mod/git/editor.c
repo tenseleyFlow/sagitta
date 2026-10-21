@@ -1479,6 +1479,6 @@ CmdStatus yew_git_cmd_diff_view(CmdCtx *cx)
 CmdStatus yew_git_cmd_conflict_scope(CmdCtx *cx)
 {
     yew_msg(cx->ed, YEW_MSG_ERROR,
-            "conflict resolution is not a 1.0 feature (F mode's diff and your editor are)");
+            "interactive conflict resolution is pending Sprint 59.8; use diff and manual editing for now");
     return YEW_CMD_ERR_STATE;
 }

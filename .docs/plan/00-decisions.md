@@ -888,6 +888,17 @@ implementation and tests. Interactive conflict resolution remains deferred
 to a separately contracted Sprint 59.8; this view never accepts or stages
 merge choices. The independent Sprint 59 soak is unchanged.
 
+**Merge resolution amendment S59.8-A1 (2026-10-21).** User-authorized
+Sprint 59.8 supersedes S59-A30 and Sprint 53's post-1.0 conflict-resolution
+deferral for ordinary textual conflicts. It owns stage-aware immutable
+Current/Incoming sources above an editable Result, individually undoable
+acceptance, stale-identity refusal, and foreground-only conflict discovery.
+The ordinary document remains the sole result/undo/journal owner. Save,
+stage, commit and continue are separate explicit actions. Sub-hunk staging
+and automated binary/rename/delete-side/submodule resolution remain deferred.
+Existing refusal commands name Sprint 59.8 until their implementations and
+tests land. This changes neither the independent soak nor any safety gate.
+
 ## Non-negotiable invariants (enforced from Sprint 0)
 
 1. **No data loss, ever.** Atomic saves; kill -9 at any instant never

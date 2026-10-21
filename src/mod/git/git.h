@@ -288,6 +288,9 @@ u32 yew_git_index_blob(Ed *ed, const char *path, void *owner,
                        YewGitBlobFn callback, char *err, size_t errsz);
 u32 yew_git_head_blob(Ed *ed, const char *path, void *owner,
                       YewGitBlobFn callback, char *err, size_t errsz);
+/* Full SHA-1/SHA-256 object ID only; no mutable refs or path framing. */
+u32 yew_git_oid_blob(Ed *ed, const char *oid, void *owner,
+                     YewGitBlobFn callback, char *err, size_t errsz);
 
 /* Deterministic framed-transport seams used by focused unit tests. */
 bool yew_git_test_blob_batch_open(Ed *ed);

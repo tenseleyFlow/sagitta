@@ -1311,6 +1311,16 @@ u32 yew_git_head_blob(Ed *ed, const char *path, void *owner,
     return git_blob_request(ed, "HEAD:", path, owner, callback, err, errsz);
 }
 
+u32 yew_git_oid_blob(Ed *ed, const char *oid, void *owner,
+                     YewGitBlobFn callback, char *err, size_t errsz)
+{
+    if (oid == NULL || !git_blob_hex((const u8 *)oid, strlen(oid))) {
+        git_error(err, errsz, "invalid Git blob object ID");
+        return 0U;
+    }
+    return git_blob_request(ed, "", oid, owner, callback, err, errsz);
+}
+
 bool yew_git_test_blob_batch_open(Ed *ed)
 {
     GitBlobBatch *batch;

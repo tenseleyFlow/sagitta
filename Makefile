@@ -748,7 +748,8 @@ UNIT_FUSS_SRC := tests/unit/test_porcelain.c tests/unit/test_gitcache.c \
                  tests/unit/test_fussdrawer.c tests/unit/test_fusscommit.c \
                  tests/unit/test_diff.c \
                  tests/unit/test_hunk.c tests/unit/test_blamecache.c \
-                 tests/unit/test_diffview.c tests/unit/test_git_editor.c
+                 tests/unit/test_diffview.c tests/unit/test_git_editor.c \
+                 tests/unit/test_git_conflict.c
 UNIT_PLUG_SRC := $(sort $(wildcard tests/unit/test_plug_*.c))
 ifeq ($(filter lsp ai,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_JSON_SRC),$(UNIT_SRC))

@@ -147,20 +147,18 @@ void test_git_commands_cross_module_boundary(void)
 #if !YEW_WITH_FUSS
     static const char absent[] =
         "this build has no fuss module; rebuild with 'make MODULES=\"… fuss\"'";
-    CmdCtx cx = {0};
 #endif
+    CmdCtx cx = {0};
     Ed ed;
     u32 seen = 0U;
     u32 i;
 
     yew_ed_init(&ed);
     YEW_ASSERT(yew_ed_open_scratch(&ed));
-#if !YEW_WITH_FUSS
     cx.ed = &ed;
     cx.win = ed.win;
     cx.count = 1U;
     cx.source = YEW_SRC_TEST;
-#endif
     for (i = 0U; i < yew_cmd_count(); i++) {
         const CmdDesc *desc = yew_cmd_at(i);
 
@@ -169,6 +167,11 @@ void test_git_commands_cross_module_boundary(void)
         seen++;
 #if YEW_WITH_FUSS
         YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
+        if (strncmp(desc->name, "ed.git.conflict.", 16U) == 0) {
+            CmdId id = yew_cmd_lookup(desc->name, (u32)strlen(desc->name));
+            YEW_ASSERT_EQ_I64(yew_cmd_invoke(id, &cx), YEW_CMD_ERR_STATE);
+            YEW_ASSERT(strstr(ed.msg.text, "Sprint 59.8") != NULL);
+        }
 #else
         {
             CmdId id = yew_cmd_lookup(desc->name, (u32)strlen(desc->name));
