@@ -162,6 +162,7 @@ bool yew_git_modal_start(Ed *ed, GitModalBridge *bridge)
         return false;
     }
     bridge->dir = yew_xstrdup(dir);
+    bridge->opener = ed->modal_keys.origin;
     bytebuf_init(&command);
     yew_shell_quote(&command, (const u8 *)exe, strlen(exe));
     bytebuf_printf(&command, " --yew-git-editor ");
@@ -234,6 +235,7 @@ void yew_git_modal_tick(Ed *ed, GitModalBridge *bridge, i64 now_ms)
                 sequence ? "Reorder lines; pick/reword/edit/squash/fixup/drop" :
                            "Edit the message; Esc stops this editor step",
                 (const char *)bytes.data + 1U, true, bridge_done, bridge);
+            ed->modal_keys.owner[YEW_MODAL_INPUT] = bridge->opener;
             bridge->waiting = true;
             yew_cmdline_target(ed)->cs.curs.data[0].pos = BYTEOFF(0U);
             yew_cmdline_target(ed)->cs.curs.data[0].anchor = BYTEOFF(0U);

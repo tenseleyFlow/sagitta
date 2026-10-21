@@ -11181,8 +11181,18 @@ static void case_s59_5_fuss_commit_modal(PtyCtx *c)
                   "commit modal did not preserve the first line");
         c->vt.sync_pairs_unstable = true;
         ptc_snapshot(c, c->test->name);
-        ptc_keys(c, "esc");
+        ptc_keys(c, "alt+m");
         s52_wait_screen_gone(c, "Commit message", 240U);
+        ptc_keys(c, "alt+m");
+        s52_wait_screen(c, "Commit message");
+        ptc_check(c, !s52_screen_contains(&c->vt, "modal subject"),
+                  "repeat opener retained a cancelled commit draft");
+        ptc_keys(c, "alt+m");
+        s52_wait_screen_gone(c, "Commit message", 240U);
+        ptc_keys(c, "ctrl+shift+/");
+        s52_wait_screen(c, "FUSS actions");
+        ptc_keys(c, "ctrl+shift+/");
+        s52_wait_screen_gone(c, "FUSS actions", 240U);
         ptc_keys(c, "ctrl+shift+/");
         s52_wait_screen(c, "FUSS actions");
         s52_type_filter(c, "A-m");

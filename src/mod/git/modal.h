@@ -2,10 +2,12 @@
 #define YEW_MOD_GIT_MODAL_H
 
 #include "util/base.h"
+#include "ui/modalkeys.h"
 
 typedef struct Ed Ed;
 
 typedef struct GitModalBridge {
+    ModalOpener opener;
     char *dir;
     char *editor_env;
     char *sequence_env;

@@ -321,6 +321,8 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
     deadline = deadline_min(deadline, background_deadline(ed, now_ms));
     deadline = deadline_min(
         deadline, absolute_deadline(yew_dispatch_deadline(ed), now_ms));
+    deadline = deadline_min(
+        deadline, absolute_deadline(yew_modal_keys_deadline(ed), now_ms));
     deadline = deadline_min(deadline,
                             yew_input_deadline(&ed->in, now_ms));
     deadline = deadline_min(deadline,
@@ -657,6 +659,7 @@ int yew_loop_run(Ed *ed)
 
         /* Deadline work cannot split a queued typeahead burst. */
         yew_dispatch_tick(ed, now);
+        yew_ed_modal_tick(ed, now);
         yew_lsp_highlight_cursor(ed, ed->win);
         /* General deadlines remain correctness clocks during sustained
          * input (workspace saves, message expiry, tab-jump expiry, and

@@ -1965,6 +1965,8 @@ void yew_ed_prompt(Ed *ed, PromptKind prompt)
     if (ed == NULL)
         return;
     ed->prompt = prompt;
+    if (prompt != YEW_PROMPT_NONE)
+        yew_modal_keys_open(ed, YEW_MODAL_PROMPT);
     {
         const Buffer *doc = yew_ed_doc(ed);
 
@@ -2335,9 +2337,19 @@ static void ed_handle_key(Ed *ed, Key key, i64 now_ms);
 
 void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 {
-    ed_handle_key(ed, key, now_ms);
+    if (ed == NULL || key.kind != YEW_EV_KEY)
+        return;
+    yew_record_key(ed, key);
+    ed->now_ms = now_ms;
+    yew_modal_keys_route(ed, key, now_ms, ed_handle_key);
     /* Sprint 57.31 §2: an event boundary -- a *command-line* buffer
      * closed by this key gives its line back to the prompt here. */
+    yew_cmdedit_settle(ed);
+}
+
+void yew_ed_modal_tick(Ed *ed, i64 now_ms)
+{
+    yew_modal_keys_tick(ed, now_ms, ed_handle_key);
     yew_cmdedit_settle(ed);
 }
 
@@ -2352,7 +2364,6 @@ static void ed_handle_key(Ed *ed, Key key, i64 now_ms)
     if (key.ev != YEW_KEY_RELEASE &&
         !(ed->search.active && key.code == YEW_KEY_ENTER))
         yew_search_preview_cancel(ed);
-    yew_record_key(ed, key);
     ed->now_ms = now_ms;
     if (ed->cmdline.active && ed->cmdline.modal) {
         (void)yew_cmdline_key(ed, &key);
@@ -2475,6 +2486,12 @@ void yew_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
     if (ed == NULL)
         return;
     if (!end && bytes == NULL && len == 0U) {
+        /* Paste is text, never the continuation of an activation chord. */
+        if (!yew_modal_keys_flush(ed, ed->now_ms, ed_handle_key)) {
+            ed->paste_active = false;
+            ed->paste.len = 0U;
+            return;
+        }
         if (ed->win != NULL)
             yew_shadow_dismiss(ed, ed->win);
         ed->paste.len = 0U;

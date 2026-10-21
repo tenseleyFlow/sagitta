@@ -1141,6 +1141,25 @@ void test_lsp_rename_cancel_command_discards_the_plan_without_mutation(void)
     YEW_ASSERT_EQ_U64(f.ed.tabs.v.len, (u64)tabs_before + 1U);
     rename_assert_sources_unchanged(&f);
     rename_assert_fixture_disk(&f);
+    {
+        Key key = {0};
+
+        /* A delayed summary keeps the original rename shortcut. */
+        f.ed.modal_keys.origin.n = (u8)yew_key_parse_seq("g R",
+            f.ed.modal_keys.origin.seq, YEW_CHORD_MAX);
+        rename_confirm_up(&f);
+        f.ed.modal_keys.origin = (ModalOpener){0};
+        key.kind = YEW_EV_KEY;
+        key.ev = YEW_KEY_PRESS;
+        key.code = (u32)'g';
+        yew_ed_handle_key(&f.ed, key, 1000);
+        key.code = (u32)'R';
+        yew_ed_handle_key(&f.ed, key, 1001);
+        YEW_ASSERT_NULL(f.ed.lsp_rename);
+        YEW_ASSERT(!f.ed.win->panel.open);
+        rename_assert_sources_unchanged(&f);
+        rename_assert_fixture_disk(&f);
+    }
     rename_fix_free(&f);
 }
 

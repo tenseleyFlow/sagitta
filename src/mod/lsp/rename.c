@@ -57,6 +57,7 @@ typedef enum RenamePhase {
 } RenamePhase;
 
 struct LspRenameState {
+    ModalOpener opener;
     RenamePlan plan;
     LspGen ask_gen;
     LspGen request_gen;
@@ -916,6 +917,8 @@ static bool rename_summary_open(Ed *ed, LspRenameState *state)
     spec.place = (u8)YEW_PANEL_CURSOR;
     spec.role = "bg";
     state->phase = (u8)RENAME_CONFIRM;
+    yew_modal_keys_open(ed, YEW_MODAL_RENAME);
+    ed->modal_keys.owner[YEW_MODAL_RENAME] = state->opener;
     if (!yew_panel_open(ed, &win->panel, &spec)) {
         state->phase = (u8)RENAME_REQUEST;
         bytebuf_free(&body);
@@ -1088,6 +1091,7 @@ bool yew_lsp_rename_test_confirm(Ed *ed, Win *w,
         old_name == NULL || new_name == NULL)
         return false;
     state = yew_xcalloc(1U, sizeof(*state));
+    state->opener = ed->modal_keys.origin;
     yew_lsp_rename_plan_init(&state->plan);
     state->old_name = yew_xstrdup(old_name);
     state->new_name = yew_xstrdup(new_name);
@@ -1146,6 +1150,7 @@ bool yew_lsp_rename_request(Ed *ed, Win *win)
         return true;
     }
     state = yew_xcalloc(1U, sizeof(*state));
+    state->opener = ed->modal_keys.origin;
     yew_lsp_rename_plan_init(&state->plan);
     state->old_name = rename_span_copy(win->buf->tb, word,
                                        &state->old_len);

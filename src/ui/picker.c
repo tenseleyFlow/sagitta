@@ -597,6 +597,7 @@ void yew_picker_open(Ed *ed, const PickerSpec *s)
     (void)memset(&pk, 0, sizeof(pk));
     pk.spec = *s;
     pk.active = true;
+    yew_modal_keys_open(ed, YEW_MODAL_PICKER);
     bytebuf_init(&pk.text);
     yew_filter_init(&pk.filter_state);
     /*
@@ -698,12 +699,16 @@ static bool accept_selected(Ed *ed, u8 how)
     }
     {
         PickerSpec spec = pk.spec;
+        ModalOpener saved = ed->modal_keys.origin;
+        ModalOpener opener = ed->modal_keys.owner[YEW_MODAL_PICKER];
 
         /* Closed FIRST: accept may open a file, split, or push another
          * picker, and none of that should happen with this one still
          * holding the keymap layer. */
         yew_picker_close(ed, true);
+        ed->modal_keys.origin = opener;
         (void)spec.accept(ed, spec.ctx, payload, how);
+        ed->modal_keys.origin = saved;
     }
     return true;
 }

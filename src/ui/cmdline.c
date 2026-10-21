@@ -584,6 +584,7 @@ void yew_cmdline_open_input(Ed *ed, const char *seed,
     if (ed->cmdline.active) {
         ed->cmdline.input_done = done;
         ed->cmdline.input_ctx = ctx;
+        yew_modal_keys_open(ed, YEW_MODAL_INPUT);
     }
 }
 
@@ -626,10 +627,12 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     size_t input_len = 0U;
     Mode restore;
     bool keep_message;
+    ModalOpener opener;
 
     if (ed == NULL || !ed->cmdline.active)
         return;
     line = &ed->cmdline;
+    opener = ed->modal_keys.owner[YEW_MODAL_INPUT];
     input_done = line->input_done;
     input_ctx = line->input_ctx;
     line->input_done = NULL;
@@ -709,8 +712,12 @@ void yew_cmdline_close(Ed *ed, bool accepted)
      * just wiped; restate it. */
     yew_search_confirm_reprompt(ed);
     if (input_done != NULL) {
+        ModalOpener saved = ed->modal_keys.origin;
+
+        ed->modal_keys.origin = opener;
         input_done(ed, accepted, (const u8 *)input_text, input_len,
                    input_ctx);
+        ed->modal_keys.origin = saved;
         yew_xfree(input_text);
     }
 }

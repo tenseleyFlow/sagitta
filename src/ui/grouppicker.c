@@ -406,6 +406,7 @@ static bool gp_open(Ed *ed, const char *dir, const char *name, bool edit)
     strmap_init(&gp.ticked);
     strmap_init(&gp.dirty);
     gp.active = true;
+    yew_modal_keys_open(ed, YEW_MODAL_GROUP);
     gp.edit_mode = edit;
     gp.result = YEW_GP_PENDING;
     gp.on_name = false;

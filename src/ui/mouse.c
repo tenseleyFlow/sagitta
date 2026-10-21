@@ -614,6 +614,7 @@ static bool menu_open_at(Ed *ed, const CtxContext *c, u16 anchor_x,
     }
     /* Through the owner: a chevron may already have it armed, and a
      * keyboard-opened menu stays keyboard-only when YEW_MOUSE=0. */
+    yew_modal_keys_open(ed, YEW_MODAL_CONTEXT);
     motion_sync();
     ed->full_damage = true;
     return true;
@@ -1052,10 +1053,12 @@ static void apply_menu_action(Ed *ed)
     const char *path = yew_ctx_target_path();
     Rect cell = yew_ctx_target_rect_get();
     const CtxActionDesc *d;
+    ModalOpener saved = ed->modal_keys.origin;
 
     if (action == (u32)CTXA_NONE || action >= (u32)CTXA__N)
         return;
     d = &yew_ctx_actions[action];
+    ed->modal_keys.origin = ed->modal_keys.owner[YEW_MODAL_CONTEXT];
     yew_region_freeze(true);
     if (apply_target(ed, d, target, cell)) {
         if (d->cmd != NULL)
@@ -1064,6 +1067,7 @@ static void apply_menu_action(Ed *ed)
             close_overlay_for(ed, kind);
     }
     yew_region_freeze(false);
+    ed->modal_keys.origin = saved;
     ed->layout_dirty = true;
     ed->full_damage = true;
 }

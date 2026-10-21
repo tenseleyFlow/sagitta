@@ -818,6 +818,10 @@ reopen the output.
 FUSS input-taking actions use centered modals. Enter accepts a single-line
 prompt; in commit messages and rebase todo/message edits it inserts a newline.
 Ctrl-S accepts either form. Escape cancels without accepting the typed text.
+Repeating a dialog's activation shortcut also cancels it (for example,
+Alt-m opens the commit modal and Alt-m again discards it). This also applies
+to list/group pickers, context menus and confirmations. Remapped chords are
+honored; holding the opening key does not toggle the dialog.
 Failed commits retain their drafts and open a separate error-output tab.
 Interactive rebase uses Git's todo and message files through an asynchronous
 editor bridge instead of starting a nested terminal editor. Cancelling a

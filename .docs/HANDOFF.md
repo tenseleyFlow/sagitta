@@ -33,6 +33,46 @@ User-directed FUSS file diff detour 59.7 is implemented;
 interactive merge resolution 59.8 is in progress (parser/matching foundation
 implemented; editor actions and merge workspace not yet available).
 
+## Modal toggles and FUSS scroll margin — 2026-10-21
+
+Two user-requested feel changes landed while the captured-lag fix awaits
+dogfooding; these do not close Sprint 59.8 or change the frozen soak.
+
+- Keyboard-opened input dialogs, list/group pickers, context menus and
+  confirmations now cancel on their actual opening shortcut. Remapped
+  multi-key chords work; held-key repeat does not close the dialog. Partial
+  chords replay into the same owner on mismatch/timeout, and paste flushes
+  them safely. Normal text, Escape and acceptance keep their existing paths.
+- Dialog callbacks carry the opener across steps. Async Git lists, amend,
+  confirmations and the rebase editor bridge retain it; LSP rename retains
+  it through its delayed confirmation. Cancellation uses the established
+  cleanup path, never submission. Enter accepting `:commands` is not treated
+  as the resulting dialog's opener. Mouse/command-line dialogs without a
+  shortcut still cancel with Escape.
+- FUSS follows selection three tree rows above the bottom, reduced to
+  `(visible - 1) / 2` on short screens. Margin rows still render entries;
+  blank room remains after the final entry. Full-screen footers are excluded
+  from the calculation. Scroll indices no longer truncate to 16 bits.
+
+Contracts: Sprint 59.5 deliverable 7 and Sprint 57.7 deliverable 6.
+Verification: Clang/GCC 16 full and Clang module-stripped builds; six shared
+modal-routing units (198 assertions) and 28 drawer units (3,574 assertions),
+including ASan/UBSan. Focused prompt, picker/group, mouse, recorder, keymap
+and LSP rename suites pass. All 44 FUSS PTYs pass twice; the six commit
+variants now exercise repeat-cancel/reopen and actions-picker toggling without
+changing their visual goldens. Real-Git workflows pass 944 assertions in
+plain and ASan/UBSan builds, including repeat-opener rebase cancellation
+preserving HEAD. Bounded plain/sanitized FUSS fuzz: seed 5905, 300 iterations,
+corpus 5, hash `2fbfa5bb38d353d5`, pass. Strict FUSS performance passes unchanged
+budgets: input-to-damage p99 0.002 ms, 20,000-entry drawer opening 1.769 ms.
+Man/docs-sync and their selftests pass; optional groff lint is unavailable.
+No full aggregate, fresh hosted CI, Valgrind or soak signoff is claimed.
+
+Dogfood binary: `./build-s59_6/yew ~/scratch/wolf/`. Nothing was installed or
+pushed, and the root-owned default `build/` was not changed. Next: the user's
+commit-modal/Insert-mode latency field check, then the unfinished merge
+workspace/actions (59.8) and queued ordinary-diff layout review.
+
 ## Captured FUSS/background indexing stall — 2026-10-21
 
 The user's `/tmp/yew-git-lag-stack.txt` captured the installed editor while

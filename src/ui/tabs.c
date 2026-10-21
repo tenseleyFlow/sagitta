@@ -2152,6 +2152,7 @@ CmdStatus yew_tab_cmd_close(CmdCtx *cx)
     }
     ed->tab_prompt.tab_id = yew_tab_at(ed, idx)->tab_id;
     ed->tab_prompt.active = true;
+    yew_modal_keys_open(ed, YEW_MODAL_TAB);
     tab_prompt_show(ed);
     return YEW_CMD_OK;
 }

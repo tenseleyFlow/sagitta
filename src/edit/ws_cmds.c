@@ -287,6 +287,7 @@ CmdStatus yew_ws_cmd_forget(CmdCtx *cx)
         return YEW_CMD_ERR_STATE;
     }
     ed->ws_prompt.active = true;
+    yew_modal_keys_open(ed, YEW_MODAL_WORKSPACE);
     ed->prompt = YEW_PROMPT_WS_FORGET;
     yew_msg(ed, YEW_MSG_WARN, "delete %s? [y] delete [esc] keep",
             ed->state.key.dir);

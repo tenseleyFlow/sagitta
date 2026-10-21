@@ -31,6 +31,7 @@
 #include "ui/cmdedit.h"
 #include "ui/cmdline.h"
 #include "ui/message.h"
+#include "ui/modalkeys.h"
 #include "ui/mouse.h"
 #include "ui/win.h"
 #include "util/arena.h"
@@ -214,6 +215,7 @@ struct Ed {
     struct YewBindings *bindings;
     KeyStack keys;
     Chord chord;
+    ModalKeys modal_keys;
     CmdId capture_cmd;
     u32 capture_count;
     bool capture_count_given;
@@ -509,5 +511,6 @@ void yew_ed_syn_note_edit(Ed *ed, Buffer *buffer, LineNo lo,
                           u64 removed, u64 inserted);
 
 void yew_ed_prompt(Ed *ed, PromptKind prompt);
+void yew_ed_modal_tick(Ed *ed, i64 now_ms);
 
 #endif

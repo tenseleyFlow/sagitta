@@ -98,6 +98,8 @@ static void dispatch_fire(Ed *ed, const Binding *selected)
     Binding binding = *selected;
     const CmdDesc *desc = yew_cmd_desc(binding.cmd);
     CmdCtx cx;
+    ModalOpener saved = ed->modal_keys.origin;
+    ModalOpener opener = {0};
 
     if (desc != NULL && (desc->flags & YEW_CMD_CAPTURES_TEXT) != 0U &&
         binding.sarg == NULL) {
@@ -118,9 +120,19 @@ static void dispatch_fire(Ed *ed, const Binding *selected)
     cx.sarg = binding.sarg;
     cx.sarg_len = binding.sarg == NULL ? 0U : (u32)strlen(binding.sarg);
     cx.source = YEW_SRC_KEY;
+    /* Enter submitting :commands is not their activation shortcut. */
+    if (!(ed->cmdline.active && ed->cmdline.kind == YEW_PROMPT_CMD)) {
+        u8 i;
+
+        opener.n = ed->chord.n;
+        for (i = 0U; i < opener.n; i++)
+            opener.seq[i] = ed->chord.seq[i];
+    }
     dispatch_reset_chord(ed);
     ed->last_cmd = binding.cmd;
+    ed->modal_keys.origin = opener;
     ed->last_status = yew_ed_invoke(ed, binding.cmd, &cx);
+    ed->modal_keys.origin = saved;
     ed->dispatch_count++;
 }
 

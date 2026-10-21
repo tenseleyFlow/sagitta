@@ -114,10 +114,11 @@ struct FussMode {
     bool backdrop_dirty;
     GitAsyncState seen_detect_state;
     GitStatusCode seen_detect_result;
-    u16 scroll;
+    u32 scroll;
     u32 saved_buffer_id;
     u32 viewer_buffer_id;
     u32 pending_job;
+    ModalOpener pending_opener;
     u32 seen_result_job;
     u32 mutation_snapshot_gen;
     bool pending_view;
@@ -1107,7 +1108,13 @@ void yew_fuss_tick(Ed *ed, i64 now_ms)
     if (ed == NULL || ed->fuss == NULL)
         return;
     yew_git_modal_tick(ed, &ed->fuss->bridge, now_ms);
-    fuss_result_tick(ed);
+    {
+        ModalOpener saved = ed->modal_keys.origin;
+
+        ed->modal_keys.origin = ed->fuss->pending_opener;
+        fuss_result_tick(ed);
+        ed->modal_keys.origin = saved;
+    }
     if (!yew_fuss_active(ed))
         return;
     if (ed->fuss->opening && now_ms >= ed->fuss->opening_until_ms) {
@@ -1902,7 +1909,7 @@ void yew_fuss_draw(Ed *ed)
     FussDrawerLayout layout;
     Rect content;
     Rect tree;
-    u16 first;
+    u32 first;
     u16 visible;
     u16 tree_bottom;
     u16 tree_right;
@@ -1956,10 +1963,16 @@ void yew_fuss_draw(Ed *ed)
     }
     selected = fuss_row(f);
     if (selected >= 0 && visible != 0U) {
+        u32 margin = (visible - 1U) / 2U;
+        u32 reach;
+
+        if (margin > 3U)
+            margin = 3U;
+        reach = visible - margin;
         if ((u32)selected < f->scroll)
-            f->scroll = (u16)selected;
-        else if ((u32)selected >= (u32)f->scroll + visible)
-            f->scroll = (u16)((u32)selected - visible + 1U);
+            f->scroll = (u32)selected;
+        else if ((u32)selected - f->scroll >= reach)
+            f->scroll = (u32)selected - reach + 1U;
     }
     first = f->scroll;
     for (i = 0U; i < visible && (size_t)first + i < f->tree.items.len; i++) {
@@ -2306,6 +2319,7 @@ static CmdStatus fuss_spawn(Ed *ed, const char *verb_name,
         return YEW_CMD_ERR_IO;
     }
     f->pending_job = job;
+    f->pending_opener = ed->modal_keys.origin;
     if (f->bridge.dir != NULL)
         f->bridge.job_id = job;
     f->pending_view = view;

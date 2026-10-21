@@ -123,6 +123,29 @@ keyboard access, document bytes, cursor state and undo history.
    selection, focus, cancellation and submission semantics. Bound layout
    work, retain scrolling and keep mouse hit geometry aligned after resize.
 
+7. **Repeat the opener to cancel** (user follow-up, 2026-10-21), in
+   `src/ui/modalkeys.[ch]`, `src/edit/dispatch.c`, `src/edit/ed.c` and the
+   dialog owners. Capture the actual normalized activation chord, including
+   user remaps; repeat it inside the focused input modal, list/group picker,
+   context menu or confirmation to take its existing Escape cancellation
+   path. Never submit, save, launch the action again or reach the document.
+   Child steps inherit their workflow's opener, including asynchronous Git
+   list/confirmation/rebase requests. Mouse/command-line openings without a
+   shortcut keep Escape; Enter used to submit a command is not an opener.
+   Release and auto-repeat events cannot toggle a dialog. Partial chords
+   use the existing chord timeout; mismatches/timeouts replay their input
+   into the same dialog, never into a replacement dialog or document.
+   Plain prompt text and unrelated editing shortcuts remain usable.
+
+   **Pitfall:** modal storage is reused and callbacks may replace their
+   owner. Capture bounded value data, not keymap pointers; discard pending
+   prefixes when ownership changes. Cancellation must preserve rebase's
+   nonzero editor response and context-menu mouse-reporting cleanup.
+   Unit coverage must exercise remaps, multi-key chords, mismatches/timeouts,
+   held keys, callback replacement, nested dialogs and draft/document safety.
+   Extend the real commit-modal PTY through repeat-open/cancel/reopen and
+   actions-picker cancellation; retain all six visual variants unchanged.
+
 ## Testing Strategy
 
 - Unit: stable-ID return after reorder/close, unchanged origin TextBuf,
@@ -161,6 +184,8 @@ keyboard access, document bytes, cursor state and undo history.
 - [x] Focused unit, Git-script, PTY and sanitizer checks pass.
 - [x] Help, handoff and evidence reflect shipped behavior and remaining work.
 - [x] Input-modal visual polish and cross-terminal regression checks pass.
+- [x] Repeating the actual opener cancels dialogs, including inherited Git
+  workflow steps; remap/chord/held-key/owner-replacement tests pass.
 
 Local implementation checkpoint, 2026-10-20 (Apple-silicon macOS; unpushed):
 default and `MODULES=` builds pass. Full units: 3,051 tests, 73,852,198
@@ -188,3 +213,13 @@ case also pass after the final contrast adjustment. Manual/docs-sync and
 selftests pass. Visual previews derived from actual PTY cells were reviewed
 for dark, light and 16-color layouts. No fresh hosted CI, GCC, performance
 campaign or soak signoff is claimed. Changes remain local and unpushed.
+
+Repeat-opener checkpoint, 2026-10-21: shared routing passes six units / 198
+assertions under Clang, GCC 16, ASan/UBSan and a module-stripped build. All 44
+FUSS PTYs pass, including six unchanged commit goldens now exercising
+repeat-cancel/reopen. Real-Git workflows pass 944 assertions, plain and
+sanitized, with asynchronous rebase cancellation preserving HEAD. Prompt,
+picker/group, mouse, recorder, keymap and rename regression filters pass;
+the bounded 300-iteration FUSS fuzzer, plain and sanitized, now checks
+held-opener and repeat-cancellation safety. No hosted-CI, full-aggregate or
+soak closeout is implied. See HANDOFF for exact scope.

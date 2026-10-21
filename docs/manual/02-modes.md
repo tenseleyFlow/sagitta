@@ -49,6 +49,13 @@ count, completion menu, prompt, selection, or action mode. Pressing it again
 continues outward. This keeps cancellation predictable and prevents a key
 intended for a popup from leaking into the document.
 
+A keyboard-opened dialog also cancels when you repeat its activation
+shortcut: for example, Alt-m opens the commit modal and Alt-m again discards
+it. This applies to input dialogs, list/group pickers, context menus and
+confirmations, including remapped multi-key shortcuts. Workflow steps inherit
+their opener. Holding a key does not toggle the dialog. Mouse- or command-line-
+opened dialogs without an activation shortcut still use Escape.
+
 The same rule applies to pointer menus and panels. Keyboard reachability is
 not a fallback path: every pointer action resolves to a registered editor
 command, and the keyboard invokes that same command.

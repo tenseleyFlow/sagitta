@@ -137,6 +137,20 @@ marker redesign, additional Git verbs, keybinding changes, and pane-tree
 serialization remain out of scope. No dependency or workspace-state field is
 added.
 
+### 6. Bottom selection margin (user follow-up, 2026-10-21)
+
+`src/mod/git/fussmode.c:yew_fuss_draw` follows the selected entry with
+three tree rows below it, reduced to `(visible - 1) / 2` on short screens.
+The header and full-screen footer do not count toward available tree rows.
+Keep drawing those margin rows; this is a scroll threshold, not a smaller
+drawer. Allow blank breathing room after the final entry. Upward movement
+retains the existing top clamp. Keyboard, wheel and type-jump share this
+selection-derived offset; drawing and hit regions must remain aligned.
+Use a wide row index so selection beyond 65,535 entries cannot wrap.
+Unit tests cover short trees, long trees, the final entry, both drawer
+layouts, resize, reverse navigation and one-row/empty geometry. Existing
+FUSS PTYs and focused sanitizer tests remain required.
+
 ## Testing Strategy
 
 - **Unit/layout** (`tests/unit/test_fussdrawer.c`): exact 80×24 overlay

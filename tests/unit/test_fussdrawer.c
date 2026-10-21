@@ -958,6 +958,77 @@ static void fussfeel_write(const char *path)
     YEW_ASSERT_EQ_I64(fclose(file), 0);
 }
 
+void test_fussdrawer_bottom_margin_follows_selection(void)
+{
+    static const u16 widths[] = {80U, 40U};
+    static const u16 heights[] = {24U, 9U, 4U, 2U, 1U};
+    FussDrawerFix fix;
+    char path[PATH_MAX + 32U];
+    Ed ed;
+    size_t w;
+    size_t h;
+    u32 i;
+
+    fussdrawer_fix_make(&fix);
+    for (i = 0U; i < 40U; i++) {
+        (void)snprintf(path, sizeof(path), "%s/entry-%02u", fix.root, i);
+        fussfeel_write(path);
+    }
+    fussdrawer_enter_non_git(&ed, &fix);
+    fussdrawer_grid(&ed);
+    for (w = 0U; w < YEW_ARRAY_LEN(widths); w++) {
+        for (h = 0U; h < YEW_ARRAY_LEN(heights); h++) {
+            u16 height = heights[h];
+            u32 bottom;
+            u32 visible;
+            u32 margin;
+            u32 first = 0U;
+
+            YEW_ASSERT(yew_grid_resize(&ed.grid, height, widths[w]));
+            yew_ed_layout(&ed);
+            bottom = widths[w] == 40U ? ed.footer_rect.y : height;
+            visible = bottom > 1U ? bottom - 1U : 0U;
+            margin = visible == 0U ? 0U : (visible - 1U) / 2U;
+            if (margin > 3U)
+                margin = 3U;
+            yew_fuss_scroll(&ed, -100);
+            for (i = 0U; i < 41U; i++) {
+                u32 id;
+                u16 x;
+                u16 y;
+
+                if (i != 0U)
+                    yew_fuss_scroll(&ed, 1);
+                yew_region_frame_begin();
+                yew_fuss_draw(&ed);
+                if (visible == 0U)
+                    continue;
+                if (i - first >= visible - margin)
+                    first = i - (visible - margin) + 1U;
+                YEW_ASSERT(yew_fuss_selected_anchor(&ed, &id, &x, &y));
+                YEW_ASSERT_EQ_U64(y, 1U + i - first);
+                YEW_ASSERT(y < bottom - margin);
+                YEW_ASSERT_EQ_I64(yew_region_hit(x, y).payload, id);
+                /* The margin remains usable tree space, not clipped rows. */
+                if (i + 1U < 41U && (u32)y + 1U < bottom)
+                    YEW_ASSERT_EQ_U64(yew_region_hit(x, (u16)(y + 1U)).kind,
+                                      YEW_REGION_FUSS_ROW);
+            }
+            yew_fuss_scroll(&ed, -100);
+            yew_region_frame_begin();
+            yew_fuss_draw(&ed);
+            if (visible != 0U)
+                YEW_ASSERT(fussdrawer_row_contains(&ed.grid, 1U, "entry-00"));
+        }
+    }
+    yew_ed_free(&ed);
+    for (i = 0U; i < 40U; i++) {
+        (void)snprintf(path, sizeof(path), "%s/entry-%02u", fix.root, i);
+        YEW_ASSERT_EQ_I64(unlink(path), 0);
+    }
+    fussdrawer_fix_drop(&fix);
+}
+
 /* Three rows, because one row cannot show a selection MOVING and two
  * cannot show a wheel notch clamping. */
 static void fussfeel_make(FussFeelFix *fix)

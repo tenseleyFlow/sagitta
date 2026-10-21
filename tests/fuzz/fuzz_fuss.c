@@ -306,12 +306,33 @@ static bool check_live_fuss(const u8 *data, size_t len, char *why,
         return false;
     }
     if (len != 0U && (data[0] & 3U) == 0U) {
-        CmdCtx cx = {0};
+        Key open = {0};
 
-        cx.ed = &ed;
-        cx.win = ed.win;
-        cx.source = YEW_SRC_TEST;
-        (void)yew_fuss_cmd_commit(&cx);
+        open.kind = YEW_EV_KEY;
+        open.ev = YEW_KEY_PRESS;
+        open.code = (u32)'m';
+        open.mods = YEW_MOD_ALT;
+        yew_ed_handle_key(&ed, open, 900);
+        if (ed.cmdline.active && ed.cmdline.modal) {
+            open.ev = YEW_KEY_REPEAT;
+            yew_ed_handle_key(&ed, open, 901);
+            if (!ed.cmdline.active) {
+                (void)snprintf(why, why_cap, "held opener cancelled modal");
+                yew_git_test_spawn_set(NULL, NULL);
+                yew_ed_free(&ed);
+                return false;
+            }
+            open.ev = YEW_KEY_PRESS;
+            yew_ed_handle_key(&ed, open, 902);
+            if (ed.cmdline.active || ed.mode != YEW_MODE_F ||
+                yew_textbuf_len(ed.buffer.tb) != 0U) {
+                (void)snprintf(why, why_cap, "modal toggle failed safe cancel");
+                yew_git_test_spawn_set(NULL, NULL);
+                yew_ed_free(&ed);
+                return false;
+            }
+            yew_ed_handle_key(&ed, open, 903);
+        }
     }
     for (at = 0U; at < count; at++) {
         Key key = live_key(data[at]);

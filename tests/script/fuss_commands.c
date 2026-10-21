@@ -1720,16 +1720,28 @@ static bool pump_git_modal(Ed *ed, const char *title)
 
 static bool rebase_begin_for_base(Ed *ed, const char *base)
 {
-    CmdCtx cx = {0};
+    /* The UI command is argumentless (it normally opens a base picker).
+     * A test-only binding adapter supplies this fixture's exact base while
+     * still exercising the production dispatcher and asynchronous handler. */
+    static const CmdDesc adapter = {
+        "ed.ai.rename", yew_fuss_cmd_rebase_interactive, YEW_ARITY_STR,
+        YEW_CMD_PROMPTS, "Rebase base fixture", NULL
+    };
+    BindRow row = {"A-I", "ed.ai.rename", 0, base};
+    Key key = {0};
 
-    cx.ed = ed;
-    cx.win = ed->win;
-    cx.sarg = base;
-    cx.sarg_len = (u32)strlen(base);
-    cx.source = YEW_SRC_TEST;
-    if (yew_fuss_cmd_rebase_interactive(&cx) != YEW_CMD_OK ||
-        !pump_git_modal(ed, "Interactive rebase"))
+    if (yew_cmd_lookup(adapter.name, strlen(adapter.name)).v == 0U)
+        (void)yew_cmd_register(&adapter);
+    if (!yew_keymap_build(&ed->user_keys, "rebase fixture", &row, 1U))
         return false;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    key.mods = YEW_MOD_ALT;
+    key.code = (u32)'I';
+    yew_ed_handle_key(ed, key, yew_now_ms());
+    if (!pump_git_modal(ed, "Interactive rebase"))
+        return false;
+    CHECK(ed->modal_keys.owner[YEW_MODAL_INPUT].n == 1U);
     if (!submit_prompt(ed, "rebase", true))
         return false;
     return pump_git_modal(ed, "Interactive rebase todo");
@@ -1792,7 +1804,7 @@ static void test_rebase_modals_reword_and_cancel(const char *parent)
     CHECK(run_git(repo, head, &before, &code) && code == 0);
     CHECK(enter_fuss(repo, &ed));
     if (rebase_begin_modal(&ed)) {
-        Key escape = {0};
+        Key toggle = {0};
         size_t large_len = 1024U * 1024U;
         char *large = malloc(large_len + 1U);
 
@@ -1806,10 +1818,11 @@ static void test_rebase_modals_reword_and_cancel(const char *parent)
             CHECK(yew_textbuf_len(ed.cmdline.buf) == large_len);
             free(large);
         }
-        escape.kind = YEW_EV_KEY;
-        escape.ev = YEW_KEY_PRESS;
-        escape.code = YEW_KEY_ESCAPE;
-        yew_ed_handle_key(&ed, escape, yew_now_ms());
+        toggle.kind = YEW_EV_KEY;
+        toggle.ev = YEW_KEY_PRESS;
+        toggle.code = (u32)'I';
+        toggle.mods = YEW_MOD_ALT;
+        yew_ed_handle_key(&ed, toggle, yew_now_ms());
         CHECK(!ed.cmdline.active);
         CHECK(pump_git_modal(&ed, NULL));
         CHECK(run_git(repo, head, &after, &code) && code == 0);

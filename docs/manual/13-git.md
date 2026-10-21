@@ -15,6 +15,8 @@ path identity where possible.
 Arrows navigate the visible tree. Sibling navigation is depth-aware. Typing
 ordinary filename characters starts or extends type-to-jump over visible,
 expanded rows only; the hint expires without stealing the next unrelated key.
+Scrolling keeps three tree rows below the selection, including blank space
+after the final entry. The margin shrinks on small terminals.
 
 Actions therefore use Alt chords. The defaults include Alt-A for stage,
 Alt-D for diff, and Alt-G for opening the selected directory as a tab group.
@@ -32,7 +34,9 @@ instead of applying them to a newly selected row.
 
 Commit (`Alt-m`) opens a centered **Commit message** modal.
 Enter inserts a newline; Ctrl-S submits; Escape cancels without running a
-commit. Amend uses the previous message. Arrow movement, Shift selection,
+commit. Repeating Alt-m also cancels and discards the draft. Other dialogs
+likewise cancel on their opening shortcut. Amend uses the previous message.
+Arrow movement, Shift selection,
 undo and Ctrl-C/X/V edit the modal's private text, never the document behind
 it. Empty messages abort. Existing Git comment-character cleanup remains in
 effect. yew never invents messages or bypasses hooks. A rejected commit keeps
