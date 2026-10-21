@@ -1,6 +1,6 @@
 # yew project handoff
 
-**Current checkpoint date:** 2026-10-20
+**Current checkpoint date:** 2026-10-21
 
 **Current source:** `/Users/mfwolffe/GithubOrgs/tenseleyFlow/sagitta` on
 Apple-silicon host `nomad-1`
@@ -29,7 +29,39 @@ front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
 chapter 1. Git interaction detour 59.5 is implemented below; the current
 suggestion/navigation investigation is Sprint 59.6 (severe stall still
 unreproduced). User-directed FUSS file diff detour 59.7 is implemented;
-interactive merge resolution is queued separately as 59.8.
+interactive merge resolution is planned separately as 59.8, not implemented.
+
+## Merge-resolution planning pickup — 2026-10-21
+
+At the user's request, inspected local
+`~/GithubOrgs/FortranGoingOnForty/fit` at
+`8bdc994a04db3ce13808f497285e8d1d38e591ac` (the tenseleyFlow path is absent).
+Its source establishes two comparison panes above a full-width result,
+roughly 40/60 vertical allocation, active-pane emphasis and independent
+scrolling. No fit files were edited; this was source inspection, not a
+live visual test. Fit's first-marker-arm `incoming` terminology must not
+be copied into Git stage labels.
+
+Refined `.docs/sprints/14-audits-release/s59_8-merge-resolution.md` into
+the implementation plan: Current/stage 2 left, Incoming/stage 3 right,
+editable Result below; explicit rebase-onto/replayed labels; one-source
+and compact layouts at small sizes; immutable source snapshots sharing
+one ordinary result document/undo tree. Choices are byte-validated,
+individually undoable and revalidated asynchronously against external Git
+changes. Leave preserves the result; save/stage/continue stay explicit.
+Proposed keys preserve existing actions: FUSS Alt+e opens resolution;
+L/W/B Alt+e prefixes the merge commands. No keybindings ship in this commit.
+
+Next implementation order: scoped decision amendment plus pure parser
+tests; snapshots/revalidation and undoable choices; three-pane/compact UI
+and lifecycle tests; foreground Git integration and regression evidence.
+The existing post-1.0 refusal remains until implementation explicitly
+amends S59-A30 and Sprint 53. No source/runtime changes, push, install,
+soak reset or adjacent-worktree changes belong to this planning pass.
+Planning checks: `git diff --check` and
+`make -s -j2 BUILD=build-s59_6 test-docs-sync` pass, including the docs-sync
+selftest. No product tests or live merge UI are claimed for this docs-only
+change.
 
 ## FUSS file comparison pickup — 2026-10-20
 
