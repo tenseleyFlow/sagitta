@@ -64,10 +64,35 @@ terminal authentication prompts are disabled and failures appear as output.
 
 ## Diff, gutter, and blame
 
-FUSS diff/log/status and command results open named, read-only temporary tabs.
+FUSS **Alt-d** opens a named, read-only **file comparison** tab, not a raw
+patch transcript. It shows the full file context, red deleted rows, green
+added rows, and old/new source line numbers. The gutter's `-` and `+` remain
+distinct without color. Alt-Up/Down jumps between change runs; ordinary
+navigation, scrolling, selection and copying still work. Editing commands
+are refused in these read-only views. In very narrow panes the source
+numbers yield to the +/- marker, leaving room for text.
+
+The header names the comparison: **HEAD → saved worktree** includes staged
+and unstaged disk changes; it does **not** include unsaved editor changes.
+Untracked files (including a repository's first files before any commit)
+compare empty → saved worktree. Incoming-only rows compare merge base →
+upstream; local changes take precedence if that path also changed upstream.
+Missing final newlines are noted. Deleted files retain their old
+source lines; binary and metadata-only changes get an explanatory view.
+Comparisons are limited to 16 MiB of collected output and 200,000 displayed
+source rows; oversized, failed or incomplete output is never shown as a
+complete file comparison.
+
+The document **Alt-Shift-d** (`ed.git.diff.view`) command remains the
+index-versus-live-buffer side-by-side view, including intraline emphasis.
+It is separate from FUSS's saved-file comparison. Interactive merge choices
+(ours/incoming/both) are **not implemented yet**; a conflicted file can be
+inspected against HEAD, but the diff view cannot resolve or stage it.
+
+FUSS log/status and other command results also use read-only temporary tabs.
 Escape, `:q`, or normal tab-close dismisses the view and resumes FUSS without
-changing the original document. Standard document diff views retain their
-intraline spans. Gutter signs
+changing the original document. Closing a loading file comparison discards
+its eventual result; it never reopens itself or steals focus. Gutter signs
 come from cached hunks and share the fixed priority stack with diagnostics and
 other signs. Alt-Up/Down walks hunks from document modes. Blame is requested
 asynchronously and cached by file identity/revision; stale results cannot

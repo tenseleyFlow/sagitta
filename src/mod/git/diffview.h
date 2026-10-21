@@ -35,6 +35,31 @@ size_t yew_diff_rowmap_len(const DiffRowMap *map);
 i32 yew_diff_row_source(const DiffRowMap *map, DiffSide side,
                         size_t display_row);
 
+enum { YEW_DIFF_UNIFIED_MAX_ROWS = 200000,
+       YEW_DIFF_UNIFIED_MAX_BYTES = 16 * 1024 * 1024 };
+
+typedef struct DiffUnified {
+    Bytebuf bytes;
+    DiffRowMap rows;
+    bool before_no_lf;
+    bool after_no_lf;
+} DiffUnified;
+
+typedef enum DiffUnifiedResult {
+    YEW_DIFF_UNIFIED_OK,
+    YEW_DIFF_UNIFIED_EMPTY,
+    YEW_DIFF_UNIFIED_BINARY,
+    YEW_DIFF_UNIFIED_METADATA,
+    YEW_DIFF_UNIFIED_INVALID,
+    YEW_DIFF_UNIFIED_LIMIT
+} DiffUnifiedResult;
+
+/* Zero-init before use. INVALID/LIMIT leave the previous model untouched.
+ * Accepts one full-context Git patch, not a partial/multi-file transcript. */
+void yew_diff_unified_drop(DiffUnified *view);
+DiffUnifiedResult yew_diff_unified_build(DiffUnified *view,
+                                        const u8 *patch, size_t len);
+
 /*
  * Scratch bytes contain one logical line per row-map entry.  Source line
  * terminators are replaced by separators between scratch rows; a missing

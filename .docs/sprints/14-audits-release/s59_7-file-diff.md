@@ -49,14 +49,16 @@ merge choices. The existing document side-by-side command stays available.
 
 2. **Asynchronous FUSS ownership**, `src/mod/git/fussmode.c` and
    `src/mod/git/git.c`: open a named loading transient tab immediately;
-   use the existing callback subprocess collector with stable window and
-   buffer IDs. Update only a still-live matching view. Closing while the
+   use the existing callback subprocess collector with a stable buffer ID
+   and live-view traversal. Update only still-live matching views. Closing while the
    command runs never reopens it or steals focus. No document buffers are
    replaced. Failures become explicit text in that same temporary tab.
 
    Request no external diff/textconv, no color, no renames, fixed patch
    indicators and full context. Tracked files compare HEAD to saved disk;
-   incoming files retain merge-base-to-upstream semantics. Untracked and
+   incoming-only files retain merge-base-to-upstream semantics; local
+   changes take precedence when the same path also changed upstream.
+   Untracked and
    unborn-repository files compare empty to saved disk via `--no-index`;
    exit 1 is successful only for that mode. Paths remain literal argv
    after `--`, relative to the workspace root. Conflicted paths use a
@@ -75,8 +77,16 @@ merge choices. The existing document side-by-side command stays available.
    Use existing editor motion/search, and existing hunk commands to move
    between contiguous change runs in the unified projection.
 
-4. **Documentation and evidence**: update `docs/manual/12-git.md` if
-   present (otherwise the existing Git chapter), and `.docs/HANDOFF.md`.
+   Investigation found that `YEW_BUF_READONLY` was advertised but not
+   enforced by editing commands. `src/edit/cmd.c:yew_cmd_prepare` must
+   reject `YEW_CMD_CHANGES_BUFFER` for explicitly read-only buffers before
+   recording or mutation. Internal collectors still use EditCtx directly.
+   Do not conflate this flag with filesystem permissions: users may edit
+   an ordinary non-writable file and save it elsewhere. Cover rejection
+   with a real typing PTY and direct command invocation.
+
+4. **Documentation and evidence**: update `docs/manual/13-git.md` and
+   `.docs/HANDOFF.md`.
    Record exact focused test results; do not claim a new hosted CI pass.
 
 5. **Defer:** interactive merge editing to Sprint 59.8. Required safety

@@ -43,6 +43,9 @@ static u32 next_job_id = 8000U;
 
 static bool setup_repo(const char *repo);
 static bool enter_fuss(const char *repo, Ed *ed);
+static void check_file_diff(const char *repo, const char *path,
+                            const char *expected, bool source_rows,
+                            bool close_pending);
 static bool child_repo_path(const char *parent, const char *name,
                             char *path, size_t path_size);
 static CmdStatus invoke_active_real(const char *repo, const char *name,
@@ -672,12 +675,16 @@ static void test_f13_filename_matrix_roundtrips_every_git_surface(
 
     for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         static const char *const commands[] = {
-            "ed.git.diff", "ed.git.blame"
+            "ed.git.blame"
         };
         size_t j;
 
         CHECK(!materialized[i] ||
               write_repo_file(repo, names[i], "matrix-after\n"));
+        /* The file viewer now uses the asynchronous private collector,
+         * not the generic-result test hook. Exercise the real process and
+         * projection for every exact path, including absent worktree files. */
+        check_file_diff(repo, names[i], "matrix-before", true, false);
         for (j = 0U; j < YEW_ARRAY_LEN(commands); j++) {
             SpawnCapture capture = {0};
             size_t dash;
@@ -911,9 +918,138 @@ static bool open_amend_editor(const char *repo, Ed *ed)
     return ed->cmdline.active && ed->cmdline.modal && ed->mode == YEW_MODE_E;
 }
 
+static void check_file_diff(const char *repo, const char *path,
+                            const char *expected, bool source_rows,
+                            bool close_pending)
+{
+    Ed ed;
+    Buffer *original;
+    u32 output_id;
+    size_t tabs;
+    Bytes text = {0};
+    static const u8 unsaved[] = "unsaved document\n";
+
+    CHECK(enter_fuss(repo, &ed));
+    original = ed.win->buf;
+    {
+        EditCtx edit = yew_ed_edit_ctx_buffer(&ed, original);
+
+        CHECK(yew_edit_insert(&edit, BYTEOFF(0U), unsaved, sizeof(unsaved) - 1U));
+        yew_ed_finish_edit(&ed, &edit);
+    }
+    tabs = ed.tabs.v.len;
+    CHECK(invoke(&ed, "ed.git.diff", path, (u32)strlen(path)) == YEW_CMD_OK);
+    CHECK(ed.tabs.v.len == tabs + 1U && ed.win->buf != original);
+    CHECK((ed.win->buf->flags & (YEW_BUF_READONLY | YEW_BUF_TRANSIENT)) ==
+          (YEW_BUF_READONLY | YEW_BUF_TRANSIENT));
+    output_id = ed.win->buf->id;
+    if (close_pending) {
+        /* No callback has run yet, even if the child has already exited. */
+        CHECK(yew_tab_dismiss_transient(&ed));
+        CHECK(ed.win->buf == original && yew_fuss_active(&ed));
+        CHECK(run_jobs_idle(&ed));
+        CHECK(ed.tabs.v.len == tabs && ed.win->buf == original);
+        CHECK(yew_ws_buf_by_id(&ed, output_id) == NULL);
+    } else {
+        CHECK(run_jobs_idle(&ed));
+        CHECK(buffer_bytes(ed.win->buf, &text));
+        CHECK(bytes_contains(&text, (const u8 *)expected, strlen(expected)));
+        CHECK(!bytes_contains(&text, (const u8 *)"diff --git", 10U));
+        CHECK((ed.win->git_diff_sources.len != 0U) == source_rows);
+        CHECK(invoke(&ed, "ed.edit.insert.at", "x", 1U) == YEW_CMD_ERR_STATE);
+        CHECK(yew_textbuf_len(ed.win->buf->tb) == text.len);
+        CHECK(yew_tab_close(&ed, ed.tabs.active));
+        CHECK(ed.win->buf == original && yew_fuss_active(&ed));
+    }
+    bytes_drop(&text);
+    CHECK(buffer_bytes(original, &text));
+    CHECK(text.len == sizeof(unsaved) - 1U &&
+          memcmp(text.data, unsaved, text.len) == 0);
+    bytes_drop(&text);
+    yew_ed_free(&ed);
+}
+
+static void test_file_diff_cases(const char *parent)
+{
+    char repo[4096], path[4096];
+    char *add[] = {(char *)"add", (char *)"--", (char *)"base.txt", NULL};
+    int code = -1;
+
+    CHECK(child_repo_path(parent, "file-diffs", repo, sizeof(repo)));
+    check_file_diff(repo, "base.txt", "No saved-file differences", false, false);
+    CHECK(write_repo_file(repo, "base.txt", "staged\n"));
+    CHECK(run_git(repo, add, NULL, &code) && code == 0);
+    CHECK(write_repo_file(repo, "base.txt", "saved\n"));
+    check_file_diff(repo, "base.txt", "base\nsaved", true, false);
+    check_file_diff(repo, "base.txt", "", false, true);
+    CHECK(write_repo_file(repo, "untracked.txt", "new text"));
+    check_file_diff(repo, "untracked.txt", "new: no final newline", true, false);
+    CHECK(write_repo_file(repo, "empty.txt", ""));
+    check_file_diff(repo, "empty.txt", "File metadata changed", false, false);
+    CHECK(snprintf(path, sizeof(path), "%s/base.txt", repo) > 0);
+    CHECK(unlink(path) == 0);
+    check_file_diff(repo, "base.txt", "base", true, false);
+    {
+        FILE *file;
+        static const u8 binary[] = {'a', 0U, 'b'};
+
+        CHECK(snprintf(path, sizeof(path), "%s/binary", repo) > 0);
+        file = fopen(path, "wb");
+        CHECK(file != NULL);
+        if (file != NULL) {
+            CHECK(fwrite(binary, 1U, sizeof(binary), file) == sizeof(binary));
+            CHECK(fclose(file) == 0);
+        }
+        check_file_diff(repo, "binary", "Binary files differ", false, false);
+    }
+    {
+        char *init[] = {(char *)"init", (char *)"-q", (char *)"-b",
+                        (char *)"trunk", NULL};
+
+        CHECK(snprintf(repo, sizeof(repo), "%s/diff-unborn", parent) > 0);
+        CHECK(mkdir(repo, 0700) == 0);
+        CHECK(run_git(repo, init, NULL, &code) && code == 0);
+        CHECK(write_repo_file(repo, "first.txt", "first\n"));
+        check_file_diff(repo, "first.txt", "Empty -> saved worktree", true, false);
+    }
+    {
+        char *topic[] = {(char *)"switch", (char *)"-q", (char *)"-c",
+                         (char *)"upstream-topic", NULL};
+        char *commit[] = {(char *)"commit", (char *)"-qam",
+                          (char *)"upstream", NULL};
+        char *trunk[] = {(char *)"switch", (char *)"-q", (char *)"trunk", NULL};
+        char *upstream[] = {(char *)"branch", (char *)"--set-upstream-to=upstream-topic",
+                            (char *)"trunk", NULL};
+
+        CHECK(child_repo_path(parent, "diff-incoming", repo, sizeof(repo)));
+        CHECK(run_git(repo, topic, NULL, &code) && code == 0);
+        CHECK(write_repo_file(repo, "base.txt", "upstream\n"));
+        CHECK(run_git(repo, commit, NULL, &code) && code == 0);
+        CHECK(run_git(repo, trunk, NULL, &code) && code == 0);
+        CHECK(run_git(repo, upstream, NULL, &code) && code == 0);
+        check_file_diff(repo, "base.txt", "Merge base -> upstream", true, false);
+        CHECK(write_repo_file(repo, "base.txt", "local\n"));
+        check_file_diff(repo, "base.txt", "base\nlocal", true, false);
+    }
+    {
+        char *config[] = {(char *)"config", (char *)"diff.suppressBlankEmpty",
+                          (char *)"true", NULL};
+        char *commit[] = {(char *)"commit", (char *)"-qam", (char *)"blank", NULL};
+
+        CHECK(child_repo_path(parent, "diff-subdir", repo, sizeof(repo)));
+        CHECK(snprintf(path, sizeof(path), "%s/nested", repo) > 0);
+        CHECK(mkdir(path, 0700) == 0);
+        CHECK(write_repo_file(path, "base.txt", "start\n\nbase\n"));
+        CHECK(run_git(path, add, NULL, &code) && code == 0);
+        CHECK(run_git(path, commit, NULL, &code) && code == 0);
+        CHECK(run_git(path, config, NULL, &code) && code == 0);
+        CHECK(write_repo_file(path, "base.txt", "start\n\nchanged\n"));
+        check_file_diff(path, "base.txt", "start\n\nbase\nchanged", true, false);
+    }
+}
+
 static void test_read_views_use_expected_git_argv(const char *parent)
 {
-    static const char *const diff[] = {"diff", "HEAD", "--", "base.txt"};
     static const char *const status[] = {"status"};
     static const char *const blame[] = {
         "blame", "--porcelain", "--", "base.txt"
@@ -933,7 +1069,6 @@ static void test_read_views_use_expected_git_argv(const char *parent)
         size_t argc;
         bool literal_paths;
     } cases[] = {
-        {"ed.git.diff", "base.txt", diff, YEW_ARRAY_LEN(diff), true},
         {"ed.git.status", NULL, status, YEW_ARRAY_LEN(status), false},
         {"ed.git.blame", "base.txt", blame, YEW_ARRAY_LEN(blame), true},
         {"ed.git.history", NULL, history, YEW_ARRAY_LEN(history), false},
@@ -1312,6 +1447,7 @@ static void test_commit_refuses_conflicted_snapshot(const char *parent)
     CHECK(capture.calls == 0U);
     capture_drop(&capture);
     yew_ed_free(&ed);
+    check_file_diff(repo, "base.txt", "<<<<<<< HEAD", true, false);
 }
 
 static void test_amend_prefills_previous_message(const char *parent)
@@ -1926,6 +2062,7 @@ int main(int argc, char **argv)
     test_confirmed_discard_delete_and_rename(argv[1]);
     test_view_then_open_leaves_f_mode(argv[1]);
     test_read_views_use_expected_git_argv(argv[1]);
+    test_file_diff_cases(argv[1]);
     test_branch_switch_delete_and_merge_change_repo(argv[1]);
     test_reset_cherry_pick_and_revert_use_exact_refs(argv[1]);
     test_rebase_prepare_only_loads_exact_log_range(argv[1]);

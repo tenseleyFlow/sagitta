@@ -169,6 +169,7 @@ static const GitVerb git_verbs[] = {
     GIT_READ("upstream-oid", true, true),
     GIT_READ("incoming", true, true),
     GIT_READ("diff", true, true),
+    GIT_READ("diff-file", true, false),
     GIT_READ("blame", true, true),
     GIT_READ("log", true, true),
     GIT_READ("reflog", true, true),
@@ -522,7 +523,7 @@ static bool git_pending_same(const GitPending *pending, const GitVerb *verb,
 static bool git_takes_paths(const GitVerb *verb)
 {
     static const char *const names[] = {
-        "stage", "unstage", "diff", "blame", "show", "switch",
+        "stage", "unstage", "diff", "diff-file", "blame", "show", "switch",
         "switch-create", "merge", "discard", "rm", "mv", "apply"
     };
     size_t i;
@@ -922,7 +923,7 @@ u32 yew_git_spawn_callback_input(Ed *ed, const GitVerb *verb,
         wrapped->stdin_len = stdin_len;
     }
     final_argv = git_build_argv(verb, argv);
-    git_env_build(NULL, NULL, false, env_set);
+    git_env_build(NULL, NULL, git_takes_paths(verb), env_set);
     spec.argv = final_argv;
     spec.cwd = yew_ws_root(ed);
     spec.sink = YEW_SINK_CALLBACK;

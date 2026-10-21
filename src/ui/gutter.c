@@ -222,6 +222,13 @@ u16 yew_gutter_width(const Win *w)
 {
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL)
         YEW_BUG("gutter width: missing window buffer");
+    if (w->git_diff_sources.len != 0U) {
+        u16 digits = decimal_digits(w->git_diff_sources.len);
+
+        if (digits < 3U)
+            digits = 3U;
+        return (u16)(2U * digits + 4U);
+    }
     return yew_gutter_width_for(yew_textbuf_line_count(w->buf->tb),
                                 w->number_style);
 }
@@ -262,6 +269,51 @@ size_t yew_gutter_number(char *dst, size_t cap, NumStyle style,
     if ((size_t)written >= cap)
         return cap - 1U;
     return (size_t)written;
+}
+
+static void draw_diff_source(Ed *ed, Win *w, u16 row, u16 col, u16 width,
+                             LineNo line, u32 sub, Cell blank)
+{
+    YewGitDiffSource source;
+    const ThemeEnt *style = NULL;
+    char before[16] = "", after[16] = "", label[48];
+    char sign = ' ';
+    u16 digits;
+    int n;
+
+    if (sub != 0U || line.v >= w->git_diff_sources.len || width == 0U)
+        return;
+    source = w->git_diff_sources.data[line.v];
+    if (source.before >= 0)
+        (void)snprintf(before, sizeof(before), "%u", (u32)source.before + 1U);
+    if (source.after >= 0)
+        (void)snprintf(after, sizeof(after), "%u", (u32)source.after + 1U);
+    if (source.before < 0 && source.after >= 0) {
+        sign = '+';
+        style = yew_theme_ui_tab(ed, "git.diff.add");
+    } else if (source.after < 0 && source.before >= 0) {
+        sign = '-';
+        style = yew_theme_ui_tab(ed, "git.diff.del");
+    }
+    if (style != NULL) {
+        if (style->fg.tag != YEW_COLOR_DEFAULT)
+            blank.fg = style->fg;
+        if (style->bg.tag != YEW_COLOR_DEFAULT)
+            blank.bg = style->bg;
+        blank.attrs = style->attrs;
+    }
+    if (width < 6U) {
+        label[0] = sign;
+        label[1] = ' ';
+        n = width == 1U ? 1 : 2;
+    } else {
+        digits = (u16)((width - 4U) / 2U);
+        n = snprintf(label, sizeof(label), "%*s %*s %c ",
+                      (int)digits, before, (int)digits, after, sign);
+    }
+    if (n > 0 && (size_t)n < sizeof(label) && n <= (int)width)
+        (void)yew_grid_puts(&ed->grid, row, col, (const u8 *)label,
+                            (size_t)n, blank.fg, blank.bg, blank.attrs);
 }
 
 void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
@@ -315,6 +367,12 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
             break;
         yew_grid_fill(grid, (u16)grid_row32, grid_col,
                       (u16)(grid_col + width), gutter_blank);
+        if (w->git_diff_sources.len != 0U) {
+            if (yew_vp_line_of_row(w, row, &line, &sub))
+                draw_diff_source(ed, w, (u16)grid_row32, grid_col, width,
+                                  line, sub, gutter_blank);
+            continue;
+        }
         if (yew_vp_line_of_row(w, row, &line, &sub)) {
             const GutterSign *diag = sign_pick(w, line, YEW_SIGN_DIAG);
             const GutterSign *git = sign_pick(w, line, YEW_SIGN_GIT);

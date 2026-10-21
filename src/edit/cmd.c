@@ -2185,6 +2185,19 @@ CmdStatus yew_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out)
         return command_deferred(d, cx);
     if (!args_valid(d, cx))
         return command_fail(d, "invalid arguments", YEW_CMD_ERR_ARG);
+    /* Internal collectors populate views through EditCtx, not commands.
+     * User edits must not invalidate immutable output/projection metadata.
+     * This flag is distinct from filesystem write permission: ordinary
+     * read-only-on-disk documents can still be edited and saved elsewhere. */
+    if (cx->win != NULL && cx->win->buf != NULL &&
+        (cx->win->buf->flags & YEW_BUF_READONLY) != 0U &&
+        ((d->flags & YEW_CMD_CHANGES_BUFFER) != 0U ||
+         strcmp(d->name, "ed.edit.undo") == 0 ||
+         strcmp(d->name, "ed.edit.redo") == 0)) {
+        if (cx->ed != NULL)
+            yew_msg(cx->ed, YEW_MSG_WARN, "read-only view");
+        return YEW_CMD_ERR_STATE;
+    }
     if (registry.record_tap != NULL &&
         (d->flags & YEW_CMD_RECORDABLE) != 0U) {
         CmdStatus recordable = yew_record_preflight(id, cx);

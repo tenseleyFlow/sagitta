@@ -6,6 +6,7 @@
 #include "edit/ed.h"
 #include "mod/git/editor.h"
 #include "mod/git/diffview.h"
+#include "text/piece.h"
 #include "unicode/grapheme.h"
 
 static GitHunk dv_hunk(u64 base_lo, u64 base_n, u64 buf_lo, u64 buf_n,
@@ -19,6 +20,167 @@ static GitHunk dv_hunk(u64 base_lo, u64 base_n, u64 buf_lo, u64 buf_n,
     h.buf_n = LINENO(buf_n);
     h.kind = kind;
     return h;
+}
+
+static DiffUnifiedResult dv_unified(DiffUnified *view, const char *patch)
+{
+    return yew_diff_unified_build(view, (const u8 *)patch, strlen(patch));
+}
+
+void test_diffview_unified_source_rows_and_bytes(void)
+{
+    static const char patch[] =
+        "diff --git a/x b/x\nindex 123..456 100644\n--- a/x\n+++ b/x\n"
+        "@@ -1,3 +1,4 @@\n one\r\n-old\n+漢字\n++new\n last\n"
+        "\\ No newline at end of file\n";
+    static const char want[] = "one\r\nold\n漢字\n+new\nlast";
+    const i32 before[] = {0, 1, -1, -1, 2};
+    const i32 after[] = {0, -1, 1, 2, 3};
+    DiffUnified view = {0};
+    size_t i;
+
+    YEW_ASSERT_EQ_I64(dv_unified(&view, patch), YEW_DIFF_UNIFIED_OK);
+    YEW_ASSERT_EQ_U64(view.bytes.len, sizeof(want) - 1U);
+    YEW_ASSERT(memcmp(view.bytes.data, want, view.bytes.len) == 0);
+    YEW_ASSERT_EQ_U64(view.rows.left.len, YEW_ARRAY_LEN(before));
+    for (i = 0U; i < YEW_ARRAY_LEN(before); i++) {
+        YEW_ASSERT_EQ_I64(view.rows.left.data[i], before[i]);
+        YEW_ASSERT_EQ_I64(view.rows.right.data[i], after[i]);
+    }
+    YEW_ASSERT(view.before_no_lf && view.after_no_lf);
+    yew_diff_unified_drop(&view);
+    YEW_ASSERT_EQ_I64(dv_unified(&view,
+        "diff --git a/x b/x\n--- /dev/null\n+++ b/x\n@@ -0,0 +1 @@\n+\n"),
+        YEW_DIFF_UNIFIED_OK);
+    YEW_ASSERT_EQ_U64(view.bytes.len, 0U);
+    YEW_ASSERT_EQ_U64(view.rows.left.len, 1U);
+    YEW_ASSERT_EQ_I64(view.rows.left.data[0], -1);
+    YEW_ASSERT_EQ_I64(view.rows.right.data[0], 0);
+    YEW_ASSERT_EQ_I64(dv_unified(&view,
+        "diff --git a/x b/x\n--- a/x\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\n"
+        "\\ No newline at end of file\n"), YEW_DIFF_UNIFIED_OK);
+    YEW_ASSERT(view.before_no_lf && !view.after_no_lf);
+    YEW_ASSERT_EQ_I64(view.rows.right.data[0], -1);
+    yew_diff_unified_drop(&view);
+}
+
+void test_diffview_unified_rejects_partial_and_malformed_atomically(void)
+{
+    const char *bad[] = {
+        "@@ -1 +1 @@\n-x\n+y\n",
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -2 +2 @@\n-x\n+y\n",
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1 @@\n-x\n+y\n",
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-x\n+y",
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-x\n+y\n+z\n",
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-x\n+y\n"
+        "@@ -3 +3 @@\n-z\n+q\n",
+        "diff --git a/x b/x\ndiff --git a/y b/y\n",
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -999999999999 +1 @@\n",
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1 @@\n-x\n"
+        "\\ No newline at end of file\n-y\n+z\n",
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n",
+        "diff --cc x\n@@@ -1 -1 +1 @@@\n",
+        "diff --git a/x b/x\nBinary files a/x and b/x differ\n"
+        "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-x\n+y\n"
+    };
+    DiffUnified view = {0};
+    size_t i;
+
+    YEW_ASSERT_EQ_I64(dv_unified(&view,
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-x\n+y\n"),
+        YEW_DIFF_UNIFIED_OK);
+    for (i = 0U; i < YEW_ARRAY_LEN(bad); i++) {
+        YEW_ASSERT_EQ_I64(dv_unified(&view, bad[i]), YEW_DIFF_UNIFIED_INVALID);
+        YEW_ASSERT_EQ_U64(view.bytes.len, 3U);
+        YEW_ASSERT(memcmp(view.bytes.data, "x\ny", 3U) == 0);
+        YEW_ASSERT_EQ_U64(view.rows.left.len, 2U);
+    }
+    YEW_ASSERT_EQ_I64(yew_diff_unified_build(&view, (const u8 *)"x",
+        (size_t)YEW_DIFF_UNIFIED_MAX_BYTES + 1U), YEW_DIFF_UNIFIED_LIMIT);
+    YEW_ASSERT_EQ_I64(yew_diff_unified_build(&view, NULL, 1U),
+                      YEW_DIFF_UNIFIED_INVALID);
+    YEW_ASSERT_EQ_I64(dv_unified(&view,
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,200001 +1 @@\n"),
+        YEW_DIFF_UNIFIED_LIMIT);
+    yew_diff_unified_drop(&view);
+}
+
+void test_diffview_unified_binary_metadata_empty_and_row_cap(void)
+{
+    DiffUnified view = {0};
+    Bytebuf patch = {0};
+    u32 i;
+
+    YEW_ASSERT_EQ_I64(dv_unified(&view, ""), YEW_DIFF_UNIFIED_EMPTY);
+    YEW_ASSERT_EQ_I64(dv_unified(&view,
+        "diff --git a/x b/x\nindex 123..456 100644\nBinary files a/x and b/x differ\n"),
+        YEW_DIFF_UNIFIED_BINARY);
+    YEW_ASSERT_EQ_I64(dv_unified(&view,
+        "diff --git a/x b/x\nold mode 100644\nnew mode 100755\n"),
+        YEW_DIFF_UNIFIED_METADATA);
+    bytebuf_printf(&patch,
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,%u +1 @@\n",
+        (unsigned)YEW_DIFF_UNIFIED_MAX_ROWS);
+    for (i = 0U; i < YEW_DIFF_UNIFIED_MAX_ROWS; i++)
+        bytebuf_append(&patch, "-x\n", 3U);
+    bytebuf_append(&patch, "+y\n", 3U);
+    YEW_ASSERT_EQ_I64(yew_diff_unified_build(&view, patch.data, patch.len),
+                      YEW_DIFF_UNIFIED_LIMIT);
+    YEW_ASSERT_EQ_U64(view.bytes.len, 0U);
+    bytebuf_free(&patch);
+    yew_diff_unified_drop(&view);
+}
+
+void test_diffview_unified_clone_gutter_and_hunk_motion(void)
+{
+    Ed ed;
+    Win *clone;
+    CmdCtx cx = {0};
+    const YewGitDiffRowStyle styles[] = {
+        YEW_GIT_DIFF_ROW_NONE, YEW_GIT_DIFF_ROW_DEL, YEW_GIT_DIFF_ROW_ADD,
+        YEW_GIT_DIFF_ROW_NONE, YEW_GIT_DIFF_ROW_ADD
+    };
+    size_t i;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, (const u8 *)"a\nb\nc\nd\ne", 9U, "diff"));
+    for (i = 0U; i < YEW_ARRAY_LEN(styles); i++) {
+        YewGitDiffSource source = {(i32)i, (i32)i};
+
+        YewGitDiffRowStyleVec_push(&ed.win->git_diff_rows, styles[i]);
+        YewGitDiffSourceVec_push(&ed.win->git_diff_sources, source);
+    }
+    YEW_ASSERT_EQ_U64(yew_gutter_width(ed.win), 10U);
+    clone = yew_ed_win_clone(&ed, ed.win);
+    YEW_ASSERT(clone != NULL);
+    YEW_ASSERT_EQ_U64(clone->git_diff_sources.len, 5U);
+    YEW_ASSERT(clone->git_diff_sources.data != ed.win->git_diff_sources.data);
+    YEW_ASSERT_EQ_I64(clone->git_diff_rows.data[1], YEW_GIT_DIFF_ROW_DEL);
+    {
+        Buffer *other = yew_ws_scratch_new(&ed, "other", 0U);
+
+        YEW_ASSERT(other != NULL);
+        yew_ed_win_set_buffer(&ed, clone, other);
+        YEW_ASSERT_EQ_U64(clone->git_diff_sources.len, 0U);
+        YEW_ASSERT_EQ_U64(clone->git_diff_rows.len, 0U);
+        YEW_ASSERT_EQ_U64(yew_gutter_width(clone), 6U);
+    }
+    yew_ed_win_release(&ed, clone);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    YEW_ASSERT_EQ_I64(yew_git_cmd_hunk_next(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[0].pos.v, 2U);
+    YEW_ASSERT_EQ_I64(yew_git_cmd_hunk_next(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[0].pos.v, 8U);
+    YEW_ASSERT_EQ_I64(yew_git_cmd_hunk_next(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[0].pos.v, 2U);
+    YEW_ASSERT_EQ_I64(yew_git_cmd_hunk_prev(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[0].pos.v, 8U);
+    YEW_ASSERT_EQ_I64(yew_git_cmd_hunk_first(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[0].pos.v, 2U);
+    YEW_ASSERT_EQ_I64(yew_git_cmd_hunk_last(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[0].pos.v, 8U);
+    yew_ed_free(&ed);
 }
 
 void test_diffview_blame_clock_uses_injected_anchor(void)

@@ -633,6 +633,11 @@ static void layout_leaf_win(Ed *ed, Pane *leaf)
     old_cols = w->vp.cols;
     old_gutter = w->gutter_width;
     gutter = leaf->rect.w < 20U ? 0U : yew_gutter_width(w);
+    /* Source numbers may yield on narrow terminals; the non-color diff
+     * marker must remain distinguishable from document text. */
+    if (leaf->rect.w < 20U && leaf->rect.w > 2U &&
+        w->git_diff_sources.len != 0U)
+        gutter = 2U;
     if (gutter >= leaf->rect.w)
         gutter = 0U;
     w->gutter_width = gutter;

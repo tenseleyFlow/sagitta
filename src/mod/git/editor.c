@@ -1040,6 +1040,43 @@ static bool stage_patch_run(Bytebuf *patch, const char *path,
     return true;
 }
 
+static CmdStatus move_unified_hunk(CmdCtx *cx, int which)
+{
+    Win *w = cx->win;
+    Cursor *cursor = &w->cs.curs.data[w->cs.primary];
+    LineNo current = yew_textbuf_line_of(w->buf->tb, cursor->pos);
+    size_t i, first = SIZE_MAX, last = SIZE_MAX, target = SIZE_MAX;
+    bool changed_before = false;
+
+    for (i = 0U; i < w->git_diff_rows.len; i++) {
+        bool changed = w->git_diff_rows.data[i] == YEW_GIT_DIFF_ROW_ADD ||
+                       w->git_diff_rows.data[i] == YEW_GIT_DIFF_ROW_DEL;
+
+        if (changed && !changed_before) {
+            if (first == SIZE_MAX)
+                first = i;
+            last = i;
+            if (which == 1 && i > current.v && target == SIZE_MAX)
+                target = i;
+            else if (which == -1 && i < current.v)
+                target = i;
+        }
+        changed_before = changed;
+    }
+    if (first == SIZE_MAX) {
+        yew_msg(cx->ed, YEW_MSG_INFO, "no changed hunks");
+        return YEW_CMD_ERR_STATE;
+    }
+    if (which == -2 || (which == 1 && target == SIZE_MAX))
+        target = first;
+    if (which == 2 || (which == -1 && target == SIZE_MAX))
+        target = last;
+    cursor->pos = yew_textbuf_line_start(w->buf->tb, LINENO(target));
+    cursor->anchor = cursor->pos;
+    yew_vp_follow(w);
+    return YEW_CMD_OK;
+}
+
 static CmdStatus move_hunk(CmdCtx *cx, int which)
 {
     GitBufState *state;
@@ -1051,6 +1088,8 @@ static CmdStatus move_hunk(CmdCtx *cx, int which)
     if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
         cx->win->cs.curs.len == 0U)
         return YEW_CMD_ERR_STATE;
+    if (cx->win->git_diff_sources.len != 0U)
+        return move_unified_hunk(cx, which);
     yew_git_editor_prepare(cx->ed, cx->win);
     state = state_for(cx->ed, cx->win->buf, false);
     if (state == NULL || state->hunks.h.len == 0U) {

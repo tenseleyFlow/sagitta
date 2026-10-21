@@ -42,6 +42,49 @@ static void probe_tap(CmdId id, const CmdCtx *cx)
     probe_count = cx->count;
 }
 
+void test_cmd_registry_readonly_view_rejects_edits_before_recording(void)
+{
+    static const char *const commands[] = {
+        "ed.edit.insert.at", "ed.edit.replace.span", "ed.edit.delete.span",
+        "ed.edit.undo", "ed.edit.redo", "ed.clip.cut", "ed.clip.paste"
+    };
+    Ed ed;
+    CmdCtx cx = {0};
+    size_t i;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, (const u8 *)"source", 6U, "view"));
+    ed.win->buf->flags |= YEW_BUF_READONLY;
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    tap_calls = 0U;
+    yew_cmd_set_record_tap(probe_tap);
+    for (i = 0U; i < YEW_ARRAY_LEN(commands); i++) {
+        CmdId id = yew_cmd_lookup(commands[i], strlen(commands[i]));
+        const CmdDesc *desc = yew_cmd_desc(id);
+
+        YEW_ASSERT(desc != NULL);
+        cx.sarg = desc->arity == YEW_ARITY_STR ? "x" : NULL;
+        cx.sarg_len = cx.sarg == NULL ? 0U : 1U;
+        YEW_ASSERT_EQ_I64(yew_cmd_invoke(id, &cx), YEW_CMD_ERR_STATE);
+        YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.win->buf->tb), 6U);
+    }
+    YEW_ASSERT_EQ_U64(tap_calls, 0U);
+    yew_cmd_set_record_tap(NULL);
+    /* Filesystem permissions are not the immutable-view policy. */
+    ed.win->buf->flags &= ~(u32)YEW_BUF_READONLY;
+    ed.win->buf->meta.exists = true;
+    ed.win->buf->meta.mode = 0444;
+    cx.sarg = "x";
+    cx.sarg_len = 1U;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed,
+        yew_cmd_lookup("ed.edit.insert.at", 17U), &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.win->buf->tb), 7U);
+    yew_ed_free(&ed);
+}
+
 static void append_registry(Bytebuf *out)
 {
     u32 i;

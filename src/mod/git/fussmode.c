@@ -23,6 +23,7 @@
 #include "mod/git/fusscommit.h"
 #include "mod/git/fusstree.h"
 #include "mod/git/editor.h"
+#include "mod/git/diffview.h"
 #include "mod/git/git.h"
 #include "mod/git/git_int.h"
 #include "mod/git/modal.h"
@@ -89,6 +90,7 @@ typedef struct FussPreviewJob {
 enum { FUSS_OPENING_FRAME_MS = 16 };
 
 struct FussMode {
+    u32 diff_job;
     GitModalBridge bridge;
     FussTree tree;
     FussOpenMemory manual_open;
@@ -4424,11 +4426,215 @@ CmdStatus yew_fuss_cmd_fetch(CmdCtx *cx)
            YEW_CMD_ERR_STATE;
 }
 
+typedef struct FussDiffJob {
+    u32 buffer_id;
+    u32 job_id;
+    bool no_index;
+    bool incoming;
+} FussDiffJob;
+
+static void fuss_diff_decorate(Pane *pane, Buffer *buffer,
+                               const DiffUnified *view)
+{
+    Win *w;
+    size_t i, first_change = SIZE_MAX;
+
+    if (pane == NULL)
+        return;
+    if (!pane->is_leaf) {
+        fuss_diff_decorate(pane->a, buffer, view);
+        fuss_diff_decorate(pane->b, buffer, view);
+        return;
+    }
+    w = pane->win;
+    if (w == NULL || w->buf != buffer)
+        return;
+    YewGitDiffRowStyleVec_free(&w->git_diff_rows);
+    YewGitDiffSourceVec_free(&w->git_diff_sources);
+    for (i = 0U; i < 2U + view->rows.left.len; i++) {
+        YewGitDiffSource source = {-1, -1};
+        YewGitDiffRowStyle style = YEW_GIT_DIFF_ROW_NONE;
+
+        if (i >= 2U) {
+            source.before = view->rows.left.data[i - 2U];
+            source.after = view->rows.right.data[i - 2U];
+            if (source.before < 0)
+                style = YEW_GIT_DIFF_ROW_ADD;
+            else if (source.after < 0)
+                style = YEW_GIT_DIFF_ROW_DEL;
+        }
+        YewGitDiffSourceVec_push(&w->git_diff_sources, source);
+        YewGitDiffRowStyleVec_push(&w->git_diff_rows, style);
+        if (style != YEW_GIT_DIFF_ROW_NONE && first_change == SIZE_MAX)
+            first_change = i;
+    }
+    if (first_change != SIZE_MAX && w->cs.curs.len != 0U) {
+        Cursor *cursor = &w->cs.curs.data[w->cs.primary];
+
+        cursor->pos = yew_textbuf_line_start(buffer->tb, LINENO(first_change));
+        cursor->anchor = cursor->pos;
+        yew_vp_follow(w);
+    }
+}
+
+static void fuss_diff_complete(void *opaque, Ed *ed, const YewJob *job)
+{
+    FussDiffJob *owner = opaque;
+    Buffer *buffer = yew_ws_buf_by_id(ed, owner->buffer_id);
+    DiffUnified view = {0};
+    DiffUnifiedResult result = YEW_DIFF_UNIFIED_INVALID;
+    Bytebuf text = {0};
+    const char *notice = NULL;
+    size_t i;
+
+    if (ed->fuss != NULL && ed->fuss->diff_job == owner->job_id)
+        ed->fuss->diff_job = 0U;
+    /* No retained Buffer/Win pointers: Escape may have freed the tab. */
+    if (buffer == NULL)
+        return;
+    bytebuf_printf(&text, "%s | old / new | - removed / + added\n",
+        owner->incoming ? "Merge base -> upstream" :
+        owner->no_index ? "Empty -> saved worktree" : "HEAD -> saved worktree");
+    if (job->collect_capped) {
+        notice = "Diff exceeds the 16 MiB collection limit; no partial view shown.";
+    } else if (job->state != YEW_JOB_EXITED ||
+               (job->exit_code != 0 &&
+                !(owner->no_index && job->exit_code == 1))) {
+        notice = "Git diff failed or timed out; no file content was changed.";
+    } else {
+        result = yew_diff_unified_build(&view, job->collect.data,
+                                         job->collect.len);
+        switch (result) {
+        case YEW_DIFF_UNIFIED_OK: break;
+        case YEW_DIFF_UNIFIED_EMPTY:
+            notice = "No saved-file differences."; break;
+        case YEW_DIFF_UNIFIED_BINARY:
+            notice = "Binary files differ; text comparison is unavailable."; break;
+        case YEW_DIFF_UNIFIED_METADATA:
+            notice = "File metadata changed; no text hunks."; break;
+        case YEW_DIFF_UNIFIED_LIMIT:
+            notice = "Diff exceeds the 200,000-row/16 MiB view limit."; break;
+        case YEW_DIFF_UNIFIED_INVALID:
+            notice = "Unsupported or incomplete file diff; no partial view shown.";
+            break;
+        }
+    }
+    if (notice != NULL) {
+        bytebuf_printf(&text, "\n%s\n", notice);
+        bytebuf_append(&text, job->collect_err.data, job->collect_err.len);
+    } else {
+        bytebuf_printf(&text, "Alt-Up/Down changes | Esc closes%s%s\n",
+            view.before_no_lf ? " | old: no final newline" : "",
+            view.after_no_lf ? " | new: no final newline" : "");
+        bytebuf_append(&text, view.bytes.data, view.bytes.len);
+    }
+    if (fuss_replace_buffer(ed, buffer, text.data, (u64)text.len)) {
+        yew_undo_mark_saved(buffer->undo);
+        if (result == YEW_DIFF_UNIFIED_OK) {
+            for (i = 0U; i < ed->tabs.v.len; i++)
+                fuss_diff_decorate(ed->tabs.v.data[i].root, buffer, &view);
+        }
+        ed->layout_dirty = true;
+        ed->full_damage = true;
+    }
+    bytebuf_free(&text);
+    yew_diff_unified_drop(&view);
+}
+
+static void fuss_diff_destroy(void *opaque)
+{
+    yew_xfree(opaque);
+}
+
+static const YewJobCallbackOps fuss_diff_ops = {
+    fuss_diff_complete, fuss_diff_destroy
+};
+
 CmdStatus yew_fuss_cmd_diff(CmdCtx *cx)
 {
-    char *prefix[] = {(char *)"diff", (char *)"HEAD"};
-    return fuss_path_verb(cx, "diff", prefix, YEW_ARRAY_LEN(prefix),
-                          FUSS_TARGET_FILE, true);
+    char *path;
+    FussTarget target;
+    FussDiffJob *owner;
+    const GitSnapshot *snapshot;
+    Buffer *buffer;
+    char title[192], error[160];
+    char *argv[24];
+    size_t at = 0U;
+    u32 job;
+    static const u8 loading[] = "Loading file comparison... Esc closes.";
+
+    if (fuss_require(cx, NULL) != YEW_CMD_OK)
+        return YEW_CMD_ERR_STATE;
+    if (cx->ed->fuss->diff_job != 0U) {
+        yew_msg(cx->ed, YEW_MSG_WARN, "a file diff is still running");
+        return YEW_CMD_ERR_STATE;
+    }
+    path = fuss_selected_path(cx);
+    if (path == NULL) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "select a valid workspace path");
+        return YEW_CMD_ERR_ARG;
+    }
+    if (!fuss_target_guard(cx, path, FUSS_TARGET_FILE, "diff", &target)) {
+        yew_xfree(path);
+        return YEW_CMD_ERR_STATE;
+    }
+    snapshot = yew_git_snapshot(cx->ed);
+    owner = yew_xcalloc(1U, sizeof(*owner));
+    /* A path can be changed on both sides of the upstream comparison.
+     * Local saved edits take precedence; never hide them behind incoming. */
+    owner->incoming = target.incoming && !target.conflicted &&
+                      !target.staged && !target.unstaged && !target.untracked;
+    owner->no_index = !owner->incoming &&
+        (target.untracked || (snapshot != NULL && snapshot->unborn));
+    (void)snprintf(title, sizeof(title), "*diff %s*", path);
+    buffer = yew_ws_scratch_new(cx->ed, title,
+        YEW_BUF_NOUNDO | YEW_BUF_READONLY | YEW_BUF_TRANSIENT);
+    if (buffer == NULL ||
+        !fuss_replace_buffer(cx->ed, buffer, loading, sizeof(loading) - 1U)) {
+        if (buffer != NULL)
+            yew_ws_scratch_drop(cx->ed, buffer);
+        yew_xfree(owner);
+        yew_xfree(path);
+        return YEW_CMD_ERR_IO;
+    }
+    owner->buffer_id = buffer->id;
+    argv[at++] = (char *)"-c";
+    argv[at++] = (char *)"diff.suppressBlankEmpty=false";
+    argv[at++] = (char *)"diff";
+    argv[at++] = (char *)"--no-ext-diff";
+    argv[at++] = (char *)"--no-textconv";
+    argv[at++] = (char *)"--no-color";
+    argv[at++] = (char *)"--no-renames";
+    argv[at++] = (char *)"--word-diff=none";
+    argv[at++] = (char *)"--unified=200000";
+    argv[at++] = (char *)"--output-indicator-new=+";
+    argv[at++] = (char *)"--output-indicator-old=-";
+    argv[at++] = (char *)"--output-indicator-context= ";
+    argv[at++] = (char *)"--line-prefix=";
+    argv[at++] = owner->no_index ? (char *)"--no-index" :
+                  owner->incoming ? (char *)"HEAD...@{upstream}" : (char *)"HEAD";
+    argv[at++] = (char *)"--";
+    if (owner->no_index)
+        argv[at++] = (char *)"/dev/null";
+    argv[at++] = path;
+    argv[at] = NULL;
+    job = yew_git_spawn_callback(cx->ed, yew_git_verb("diff-file"), argv,
+                                 owner, &fuss_diff_ops, error, sizeof(error));
+    yew_xfree(path);
+    if (job == 0U) {
+        fuss_diff_destroy(owner);
+        yew_ws_scratch_drop(cx->ed, buffer);
+        yew_msg(cx->ed, YEW_MSG_ERROR, "%s", error);
+        return YEW_CMD_ERR_IO;
+    }
+    owner->job_id = job;
+    cx->ed->fuss->diff_job = job;
+    yew_undo_mark_saved(buffer->undo);
+    if (yew_tab_open_transient(cx->ed, buffer) < 0) {
+        yew_ws_scratch_drop(cx->ed, buffer);
+        return YEW_CMD_ERR_IO;
+    }
+    return YEW_CMD_OK;
 }
 
 CmdStatus yew_fuss_cmd_status(CmdCtx *cx)

@@ -1,0 +1,116 @@
+# yew pty golden v1
+size 100x24 alt=1 cursor=1,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 main.c  + 
+    1 int main(void) { return 0; }
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  main.c                                                              utf-8  lf  1:1  all  ⎇ trunk
+--- style
+AAAAAAAAAABBB
+CCCCBCDDDCCCCCCDDDDCCCCBBBBBBCCCCC
+CCCCC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=------r---
+B fg=default bg=default attrs=b---------
+C fg=default bg=default attrs=----------
+D fg=default bg=default attrs=--i-------
+--- viewer before leave
+# yew pty golden v1
+size 100x24 alt=1 cursor=3,10 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 main.c  2 *diff src/modified.c* + 
+          HEAD -> saved worktree | old / new | - removed / + added
+          Alt-Up/Down changes | Esc closes
+  1     - base modified                                                                             
+      1 + modified change                                                                           
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  *diff src/modified.c*                                               utf-8  lf  3:1  all  ⎇ trunk
+--- style
+AAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBCCC
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=------r---
+C fg=default bg=default attrs=b---------

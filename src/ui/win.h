@@ -46,6 +46,13 @@ typedef enum YewGitDiffRowStyle {
 
 VEC_DECL(YewGitDiffRowStyleVec, YewGitDiffRowStyle);
 
+typedef struct YewGitDiffSource {
+    i32 before; /* zero-based; -1 means no source line on this side */
+    i32 after;
+} YewGitDiffSource;
+
+VEC_DECL(YewGitDiffSourceVec, YewGitDiffSource);
+
 typedef struct Win {
     /*
      * Sprint 34: stable for this window's lifetime and never reused.
@@ -105,6 +112,7 @@ typedef struct Win {
     u64 git_sign_gen;
     u32 git_sign_buf;
     YewGitDiffRowStyleVec git_diff_rows;
+    YewGitDiffSourceVec git_diff_sources;
     SpanVec git_diff_intra;
     bool git_diff_intra_add;
     bool git_blame;

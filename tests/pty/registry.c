@@ -11093,13 +11093,18 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
         goto done;
     s52_select_path(c, "modified");
     ptc_keys(c, "alt+d");
-    s52_wait_screen(c, "diff --git");
+    s52_wait_screen(c, "Alt-Up/Down changes");
     ptc_check(c, !c->pty.reaped,
               "opening the FUSS diff viewer exited yew");
     ptc_check(c, s52_screen_contains(&c->vt, "modified change"),
               "FUSS diff viewer did not render the dirty-file result");
-    ptc_check(c, s52_screen_contains(&c->vt, "*git diff*"),
+    ptc_check(c, s52_screen_contains(&c->vt, "*diff src/modified.c*"),
               "FUSS diff result did not get its own titled tab");
+    ptc_check(c, s52_screen_contains(&c->vt, "1     - base modified") &&
+                 s52_screen_contains(&c->vt, "1 + modified change"),
+              "file diff did not show old/new line numbers and change markers");
+    ptc_check(c, !s52_screen_contains(&c->vt, "diff --git"),
+              "file diff leaked raw patch framing into source view");
     if (c->failed)
         goto done;
     snapshot_write(&c->vt, &viewer);
@@ -11118,11 +11123,25 @@ static void case_s52_fuss_diff_viewer(PtyCtx *c)
               "leaving FUSS did not restore the original buffer layout");
     ptc_check(c, !s52_screen_contains(&c->vt, "diff --git"),
               "leaving FUSS left the diff viewer visible");
-    ptc_check(c,
-              memcmp(original_cells, c->vt.cells,
-                     (size_t)(c->vt.rows - 1U) * c->vt.cols *
-                         sizeof(*original_cells)) == 0,
-              "leaving FUSS did not restore the original layout exactly");
+    {
+        size_t i;
+        bool restored = true;
+
+        for (i = 0U; i < (size_t)(c->vt.rows - 1U) * c->vt.cols; i++) {
+            const VtCell *a = &original_cells[i];
+            const VtCell *b = &c->vt.cells[i];
+
+            if (a->nb != b->nb || a->w != b->w || a->attrs != b->attrs ||
+                memcmp(a->g, b->g, a->nb) != 0 ||
+                memcmp(&a->fg, &b->fg, sizeof(a->fg)) != 0 ||
+                memcmp(&a->bg, &b->bg, sizeof(a->bg)) != 0) {
+                restored = false;
+                break;
+            }
+        }
+        ptc_check(c, restored,
+                  "leaving FUSS did not restore the original layout exactly");
+    }
     if (c->failed)
         goto done;
     c->vt.sync_pairs_unstable = true;
@@ -11764,6 +11783,54 @@ fail:
     bytebuf_free(&base);
     ptc_check(c, false, "Sprint 53 diff-view fixture creation failed");
     return false;
+}
+
+static void case_s59_7_fuss_file_diff(PtyCtx *c)
+{
+    char repo[PATH_MAX];
+
+    if (!s53_diff_fixture(c, repo, sizeof(repo)) ||
+        !s52_spawn_editor(c, "main.c"))
+        return;
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    s52_wait_screen(c, "git discovery unavailable");
+    s53_clear_message(c);
+    s52_wait_screen(c, "⎇ trunk");
+    ptc_keys(c, "f");
+    s52_wait_screen(c, "git-diff-view · trunk");
+    ptc_bytes(c, "main");
+    s52_wait_screen(c, "jump: main");
+    ptc_keys(c, "alt+d");
+    s52_wait_screen(c, "Alt-Up/Down changes");
+    ptc_check(c, s52_screen_contains(&c->vt, "1   1   alpha") &&
+                 s52_screen_contains(&c->vt, "2     - left-only-a") &&
+                 s52_screen_contains(&c->vt, "3 + shared new") &&
+                 s52_screen_contains(&c->vt, "8   7   tail"),
+              "full-context file diff lost source rows or old/new coordinates");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+    ptc_resize(c, c->test->rows, 18U);
+    s52_wait_screen(c, "- left-only-a");
+    s52_wait_screen(c, "+ shared new");
+    ptc_resize(c, c->test->rows, c->test->cols);
+    s52_wait_screen(c, "1   1   alpha");
+    ptc_keys(c, "i");
+    ptc_bytes(c, "x");
+    s52_wait_screen(c, "read-only view");
+    ptc_check(c, s52_screen_contains(&c->vt, "- left-only-a"),
+              "typing mutated the read-only comparison");
+    /* Standard tab-close works from L mode as well as Escape dismissal. */
+    ptc_keys(c, "esc");
+    if (!s52_screen_contains(&c->vt, "git-diff-view · trunk")) {
+        ptc_keys(c, "t c");
+        s52_wait_screen(c, "git-diff-view · trunk");
+    }
+    ptc_keys(c, "esc");
+    s52_wait_screen(c, "right-only");
+    ptc_check(c, !s52_screen_contains(&c->vt, "left-only-a"),
+              "closing the comparison changed the working document");
+    force_quit(c);
 }
 
 static void case_s53_diff_view(PtyCtx *c)
@@ -12782,6 +12849,11 @@ const PtyCase yew_pty_cases[] = {
     C(fuss_actions_palette, modern, 24U, 100U, case_s52_fuss),
     C(fuss_diff_viewer_restores_layout, modern, 24U, 100U,
       case_s52_fuss_diff_viewer),
+    C(fuss_diff_viewer_light_theme, modern, 24U, 100U,
+      case_s52_fuss_diff_viewer),
+    C(fuss_diff_viewer_nocolor, modern, 24U, 100U,
+      case_s52_fuss_diff_viewer),
+    C(s59_7_fuss_file_diff, modern, 24U, 100U, case_s59_7_fuss_file_diff),
     C(s59_5_fuss_commit_modal, modern, 24U, 100U,
       case_s59_5_fuss_commit_modal),
     C(s59_5_fuss_commit_modal_light_theme, modern, 24U, 100U,

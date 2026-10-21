@@ -37,6 +37,168 @@ static bool rowmap_range(DiffRowMap *map, u32 left, u32 right, u32 count)
     return true;
 }
 
+void yew_diff_unified_drop(DiffUnified *view)
+{
+    if (view == NULL)
+        return;
+    bytebuf_free(&view->bytes);
+    yew_diff_rowmap_drop(&view->rows);
+    (void)memset(view, 0, sizeof(*view));
+}
+
+static bool unified_prefix(const u8 *line, size_t len, const char *prefix)
+{
+    size_t n = strlen(prefix);
+
+    return len >= n && memcmp(line, prefix, n) == 0;
+}
+
+static bool unified_number(const u8 *s, size_t len, size_t *at, u32 *out)
+{
+    u32 n = 0U;
+    size_t start = *at;
+
+    while (*at < len && s[*at] >= '0' && s[*at] <= '9') {
+        u32 d = (u32)(s[*at] - '0');
+
+        if (n > (UINT32_MAX - d) / 10U)
+            return false;
+        n = n * 10U + d;
+        (*at)++;
+    }
+    *out = n;
+    return *at != start;
+}
+
+static bool unified_range(const u8 *s, size_t len, size_t *at, u32 *count)
+{
+    u32 start;
+
+    *count = 1U;
+    if (!unified_number(s, len, at, &start))
+        return false;
+    if (*at < len && s[*at] == ',') {
+        (*at)++;
+        if (!unified_number(s, len, at, count))
+            return false;
+    }
+    /* Full context starts at line 1; an absent side uses 0,0. */
+    return start == (*count == 0U ? 0U : 1U);
+}
+
+DiffUnifiedResult yew_diff_unified_build(DiffUnified *view,
+                                        const u8 *patch, size_t len)
+{
+    DiffUnified built = {0};
+    DiffUnifiedResult result = YEW_DIFF_UNIFIED_INVALID;
+    size_t at = 0U;
+    u32 before_n = 0U, after_n = 0U, before = 0U, after = 0U;
+    bool file = false, old_header = false, new_header = false;
+    bool hunk = false, binary = false, marker_allowed = false;
+    u8 previous = 0U;
+
+    if (view == NULL || (patch == NULL && len != 0U))
+        return YEW_DIFF_UNIFIED_INVALID;
+    if (len > YEW_DIFF_UNIFIED_MAX_BYTES)
+        return YEW_DIFF_UNIFIED_LIMIT;
+    if (len != 0U && memchr(patch, 0, len) != NULL)
+        return YEW_DIFF_UNIFIED_INVALID;
+    while (at < len) {
+        const u8 *line = patch + at;
+        const u8 *end = memchr(line, '\n', len - at);
+        size_t n;
+
+        if (end == NULL)
+            goto done;
+        n = (size_t)(end - line);
+        at += n + 1U;
+        if (!hunk) {
+            if (unified_prefix(line, n, "diff --git ")) {
+                if (file)
+                    goto done;
+                file = true;
+            } else if (!file) {
+                goto done;
+            } else if (unified_prefix(line, n, "--- ")) {
+                if (old_header || new_header || binary)
+                    goto done;
+                old_header = true;
+            } else if (unified_prefix(line, n, "+++ ")) {
+                if (!old_header || new_header)
+                    goto done;
+                new_header = true;
+            } else if (unified_prefix(line, n, "@@ -")) {
+                size_t p = 4U;
+
+                if (!new_header || binary ||
+                    !unified_range(line, n, &p, &before_n) ||
+                    n - p < 2U || line[p++] != ' ' || line[p++] != '+' ||
+                    !unified_range(line, n, &p, &after_n) ||
+                    n - p < 3U || memcmp(line + p, " @@", 3U) != 0 ||
+                    (before_n == 0U && after_n == 0U))
+                    goto done;
+                if (before_n > YEW_DIFF_UNIFIED_MAX_ROWS ||
+                    after_n > YEW_DIFF_UNIFIED_MAX_ROWS) {
+                    result = YEW_DIFF_UNIFIED_LIMIT;
+                    goto done;
+                }
+                hunk = true;
+            } else if (unified_prefix(line, n, "Binary files ")) {
+                if (old_header || binary)
+                    goto done;
+                binary = true;
+            } else if (!unified_prefix(line, n, "index ") &&
+                       !unified_prefix(line, n, "old mode ") &&
+                       !unified_prefix(line, n, "new mode ") &&
+                       !unified_prefix(line, n, "deleted file mode ") &&
+                       !unified_prefix(line, n, "new file mode ")) {
+                goto done;
+            }
+            continue;
+        }
+        if (n == sizeof("\\ No newline at end of file") - 1U &&
+            memcmp(line, "\\ No newline at end of file", n) == 0) {
+            if (!marker_allowed ||
+                (previous != '+' && before != before_n) ||
+                (previous != '-' && after != after_n))
+                goto done;
+            built.before_no_lf |= previous != '+';
+            built.after_no_lf |= previous != '-';
+            marker_allowed = false;
+            continue;
+        }
+        if (n == 0U || (line[0] != ' ' && line[0] != '-' && line[0] != '+'))
+            goto done;
+        if ((line[0] != '+' && (before == before_n || built.before_no_lf)) ||
+            (line[0] != '-' && (after == after_n || built.after_no_lf)))
+            goto done;
+        if (built.rows.left.len >= YEW_DIFF_UNIFIED_MAX_ROWS) {
+            result = YEW_DIFF_UNIFIED_LIMIT;
+            goto done;
+        }
+        if (built.rows.left.len != 0U)
+            bytebuf_push_u8(&built.bytes, '\n');
+        bytebuf_append(&built.bytes, line + 1U, n - 1U);
+        (void)rowmap_pair(&built.rows,
+            line[0] == '+' ? -1 : (i32)before++,
+            line[0] == '-' ? -1 : (i32)after++);
+        previous = line[0];
+        marker_allowed = true;
+    }
+    if (hunk && (before != before_n || after != after_n))
+        goto done;
+    if (!hunk && (old_header || new_header))
+        goto done;
+    result = hunk ? YEW_DIFF_UNIFIED_OK : binary ? YEW_DIFF_UNIFIED_BINARY :
+             file ? YEW_DIFF_UNIFIED_METADATA : YEW_DIFF_UNIFIED_EMPTY;
+    yew_diff_unified_drop(view);
+    *view = built;
+    return result;
+done:
+    yew_diff_unified_drop(&built);
+    return result;
+}
+
 void yew_diff_rowmap_init(DiffRowMap *map)
 {
     if (map != NULL)

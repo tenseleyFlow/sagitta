@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "mod/git/gutter.h"
+#include "mod/git/diffview.h"
 
 enum { GIT_DIFF_FUZZ_MAX_LINES = 64 };
 
@@ -149,6 +150,55 @@ static void make_sequences(const u8 *data, size_t len,
     }
 }
 
+static bool check_unified(const u8 *data, size_t len)
+{
+    Bytebuf patch = {0}, expected = {0};
+    DiffUnified view = {0};
+    size_t i, count = len > 64U ? 64U : len;
+    u32 rows = (u32)count + 1U;
+    bool ok;
+
+    bytebuf_printf(&patch,
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,%u +1,%u @@\n",
+        rows, rows);
+    for (i = 0U; i < (size_t)rows * 2U; i++) {
+        u8 byte = i == 0U || len == 0U ? 'x' : data[(i - 1U) % len];
+
+        if (byte == 0U || byte == '\n')
+            byte = 'x';
+        bytebuf_push_u8(&patch, i < rows ? '-' : '+');
+        bytebuf_push_u8(&patch, byte);
+        bytebuf_push_u8(&patch, '\n');
+        if (i != 0U)
+            bytebuf_push_u8(&expected, '\n');
+        bytebuf_push_u8(&expected, byte);
+    }
+    ok = yew_diff_unified_build(&view, patch.data, patch.len) ==
+             YEW_DIFF_UNIFIED_OK && view.rows.left.len == (size_t)rows * 2U &&
+         view.bytes.len == expected.len &&
+         memcmp(view.bytes.data, expected.data, expected.len) == 0;
+    for (i = 0U; ok && i < (size_t)rows * 2U; i++)
+        ok = view.rows.left.data[i] == (i < rows ? (i32)i : -1) &&
+             view.rows.right.data[i] == (i < rows ? -1 : (i32)(i - rows));
+    /* Mutate both framing and content. Failure must keep the last complete
+     * projection; success must still have one source pair per output row. */
+    for (i = 0U; i < count; i++)
+        patch.data[((size_t)data[i] + i * 17U) % patch.len] = data[i];
+    {
+        DiffUnifiedResult result = yew_diff_unified_build(&view, patch.data,
+                                                          patch.len);
+
+        if (result == YEW_DIFF_UNIFIED_INVALID || result == YEW_DIFF_UNIFIED_LIMIT)
+            ok = ok && view.bytes.len == expected.len &&
+                 memcmp(view.bytes.data, expected.data, expected.len) == 0;
+        ok = ok && view.rows.left.len == view.rows.right.len;
+    }
+    yew_diff_unified_drop(&view);
+    bytebuf_free(&expected);
+    bytebuf_free(&patch);
+    return ok;
+}
+
 static bool check_git_diff(const u8 *data, size_t len,
                            char *why, size_t why_cap)
 {
@@ -162,6 +212,10 @@ static bool check_git_diff(const u8 *data, size_t len,
     GitHunkVec second = {0};
     bool ok;
 
+    if (!check_unified(data, len)) {
+        (void)snprintf(why, why_cap, "unified projection or atomic failure mismatch");
+        return false;
+    }
     make_sequences(data, len, left, &left_n, right, &right_n);
     arena_init(&first_arena);
     arena_init(&second_arena);
