@@ -27,7 +27,85 @@ The product code used by the soak remains the exact hosted-green anchor.
 **Active implementation frontier:** Sprint 59 — remediation verification,
 front closeouts, man pages, `yew tutor`, the user manual, and Fletch book
 chapter 1. Git interaction detour 59.5 is implemented below; the current
-user-directed suggestion/navigation investigation is Sprint 59.6.
+suggestion/navigation investigation is Sprint 59.6 (severe stall still
+unreproduced). User-directed FUSS file diff detour 59.7 is implemented;
+interactive merge resolution is queued separately as 59.8.
+
+## FUSS file comparison pickup — 2026-10-20
+
+Sprint 59.7 contract `516161e7`, implementation `5854f816`: Alt+d now
+opens a full-context unified **file view** in a separate transient tab.
+Old/new source gutters, red deleted rows, green added rows, non-color +/-
+markers, first-change positioning and Alt-Up/Down change navigation replace
+raw patch framing. Below 20 columns, source numbers yield to a two-cell
+marker gutter. The document index/live-buffer side-by-side command and its
+intraline highlighting are unchanged.
+
+The header distinguishes HEAD → saved worktree, empty → saved worktree
+(untracked/unborn), and merge base → upstream (incoming-only). If a path
+also changed locally, its saved changes take precedence over incoming.
+The view does **not** include unsaved editor changes. Deleted files, CRLF,
+Unicode/invalid UTF-8, absent final newlines, binary and metadata-only cases
+are handled explicitly. Full-context parsing is bounded to 16 MiB/200,000
+rows and refuses incomplete/multi-file/combined output. Git runs through
+the noninteractive, capped callback collector, with no external diff or
+textconv, literal paths, fixed indicators and private buffer-ID ownership.
+Closing while loading never resurrects the tab; original unsaved contents
+are checked byte-for-byte after both Escape-style and ordinary tab close.
+
+Investigation also found that the existing read-only flag was not enforced
+by command dispatch. `yew_cmd_prepare` now rejects editing commands and
+undo/redo on explicitly immutable views before recording or mutation.
+Collectors still populate their own scratch buffers through EditCtx;
+ordinary files lacking filesystem write permission remain editable for
+Save As. Real typing in the diff and direct command rejection are tested.
+
+Local Apple-silicon evidence (build requests use `-j2`):
+
+- Warning-clean default Clang build: `make -s -j2 BUILD=build-s59_6
+  build-s59_6/yew build-s59_6/unit_tests build-s59_6/pty_runner`.
+  GCC 16 likewise builds yew/unit tests with `BUILD=build-s59_7-gcc
+  CC=/opt/homebrew/opt/gcc/bin/gcc-16`; its `diffview` and `cmd_registry`
+  filters pass (11 / 170 and 6 / 21,289 tests/assertions).
+  A fresh module-stripped build also passes with
+  `BUILD=build-s59_7-min MODULES=`; `--version` reports `modules: none`.
+- With `YEW_RUNTIME_DIR="$PWD/runtime"`, Clang filters pass: `diffview`
+  11 / 170, `cmd` 141 / 75,295, `git_` 43 / 209,868, `fuss` 86 / 3,853,
+  `draw_` 16 / 187,515, `gutter` 9 / 143, `viewport` 21 / 223, and
+  `tabs_` 45 / 1,545. Filters overlap; these are not a unique test total.
+- `make -s -j2 BUILD=build-s59_6 test-fuss-commands test-git-script
+  test-git-hunks`: 939, 15,372 and 254 assertions respectively pass.
+  Fixtures include exact filename bytes, nested workspace roots, staged
+  plus unstaged changes, untracked/unborn, incoming/local precedence,
+  conflicted-file inspection, binary, empty/deleted, custom blank-context
+  configuration, read-only enforcement and close-before-callback.
+- `BUILD=build-s59_6-san SAN=1`: focused `diffview`, `cmd_registry`, `gutter` and
+  the complete 939-assertion `test-fuss-commands` pass with
+  `ASAN_OPTIONS=detect_leaks=0:abort_on_error=1`
+  `UBSAN_OPTIONS=halt_on_error=1`. No LSan claim.
+- PTYs from the writable `build-s59_6/pty-cwd`: `YEW_PTY_FILTER=fuss_`
+  passes 44 cases, each twice; `YEW_PTY_FILTER=git_editor_diff` passes both
+  existing side-by-side cases, each twice. The full-context case also
+  verifies 18-column reflow, actual typing refusal and standard tab close.
+  Dark/light/no-color goldens were reviewed before non-update reruns.
+- Extended `fuzz_git_diff` exercises valid full-context projections plus
+  mutated framing and atomic rejection. Seed 597: 2,000 iterations pass
+  normally; 5,000 pass under ASan/UBSan. The pure 200,001-row rejection
+  probe took 0.01 s wall time with 6,520,832 bytes maximum RSS on this host
+  (`/usr/bin/time -l`); this is a parser probe, not end-to-end UI latency.
+- Manual checker/selftest pass from the writable PTY cwd with the four
+  `YEW_MANUAL_*` executable/build overrides pointing into `build-s59_6`.
+  `test-docs-sync` and its selftest pass. No hosted CI claim.
+
+Next: `.docs/sprints/14-audits-release/s59_8-merge-resolution.md` is the
+explicit **queued, unimplemented** merge-editor contract: stage-aware side
+labels (especially rebase), undoable per-conflict choices, result-document
+ownership, stale-content refusal, foreground-only automatic opening and
+separate explicit save/stage. Read-only diff viewing does not resolve,
+stage or continue conflicts. Preserve the independent Sprint 59 soak and
+the still-open 59.6 slowdown reproduction; neither was reset or claimed
+fixed here. No push, install, user-workspace edits or adjacent-worktree
+changes were performed.
 
 ## Input-modal UI follow-up — 2026-10-20
 

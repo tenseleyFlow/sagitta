@@ -129,3 +129,9 @@ merge choices. The existing document side-by-side command stays available.
 9. Manual and handoff name the implemented surface and merge follow-up.
 10. Commit in coherent chunks. No feature removal, gate relaxation or soak
     restart to deliver this UI change.
+
+Checkpoint: implemented in `5854f816`; exact local verification is recorded
+in `.docs/HANDOFF.md` under **FUSS file comparison pickup**. The queued
+merge-resolution contract is `s59_8-merge-resolution.md`, not a claim that
+accept-current/incoming/both has shipped. Clang, GCC and stripped builds,
+focused unit/script/PTY checks, ASan/UBSan and bounded fuzz smoke pass.
