@@ -5,6 +5,7 @@
 #define _XOPEN_SOURCE 700
 
 #include "ui/grouppicker.h"
+#include "edit/theme_cmds.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -744,10 +745,15 @@ void yew_gp_draw(Ed *ed)
     u16 x0;
     u16 y0;
     int i;
-    YewColor fg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-    YewColor accent = {YEW_COLOR_RGB, 120U, 180U, 255U};
-    YewColor dim = {YEW_COLOR_RGB, 120U, 120U, 120U};
+    ThemeEnt surface = yew_theme_modal_style(ed, "modal.surface");
+    ThemeEnt title = yew_theme_modal_style(ed, "modal.title");
+    ThemeEnt detail = yew_theme_modal_style(ed, "modal.detail");
+    ThemeEnt key = yew_theme_modal_style(ed, "modal.key");
+    ThemeEnt selection = yew_theme_modal_style(ed, "modal.selection");
+    YewColor fg = surface.fg;
+    YewColor bg = surface.bg;
+    YewColor accent = key.fg;
+    YewColor dim = detail.fg;
     char line[YEW_GP_WIDTH_MAX + 64];
 
     if (!gp.active || ed == NULL || ed->grid.cols == 0U)
@@ -765,6 +771,10 @@ void yew_gp_draw(Ed *ed)
         Cell blank;
 
         (void)memset(&blank, 0, sizeof(blank));
+        blank.w = 1U;
+        blank.fg = fg;
+        blank.bg = bg;
+        blank.attrs = surface.attrs;
         for (i = 0; i < (int)h; i++)
             yew_grid_fill(&ed->grid, (u16)(y0 + i), x0, (u16)(x0 + w),
                           blank);
@@ -776,7 +786,7 @@ void yew_gp_draw(Ed *ed)
     (void)snprintf(line, sizeof(line), " %s ",
                    gp.edit_mode ? "Edit Tab Group" : "New Tab Group");
     (void)yew_grid_puts(&ed->grid, y0, x0, (const u8 *)line, strlen(line),
-                        fg, bg, YEW_ATTR_BOLD);
+                        title.fg, bg, title.attrs);
 
     (void)snprintf(line, sizeof(line), " name: %s%s", gp.name,
                    gp.on_name ? "_" : "");
@@ -810,6 +820,9 @@ void yew_gp_draw(Ed *ed)
         char canon[YEW_GP_PATH_MAX];
         bool ticked = false;
         bool is_dirty = false;
+        bool selected = idx == gp.cursor && !gp.on_name;
+        int cells;
+        size_t fit;
 
         if (idx >= gp.n_rows)
             break;
@@ -834,11 +847,21 @@ void yew_gp_draw(Ed *ed)
                        ticked && is_dirty ? " " : "",
                        ticked && is_dirty
                            ? yew_glyph(YEW_GLYPH_DIRTY_TICK) : "");
-        (void)yew_grid_puts(&ed->grid, y, x0, (const u8 *)line,
-                            strlen(line), ticked ? accent : fg, bg,
-                            idx == gp.cursor && !gp.on_name
-                                ? YEW_ATTR_REVERSE
-                                : 0U);
+        if (selected) {
+            Cell blank = {0};
+
+            blank.w = 1U;
+            blank.fg = selection.fg;
+            blank.bg = selection.bg;
+            blank.attrs = selection.attrs;
+            yew_grid_fill(&ed->grid, y, x0, (u16)(x0 + w), blank);
+            line[0] = '>';
+        }
+        fit = yew_str_clip((const u8 *)line, strlen(line), w, &cells);
+        (void)yew_grid_puts(&ed->grid, y, x0, (const u8 *)line, fit,
+                            selected ? selection.fg : ticked ? accent : fg,
+                            selected ? selection.bg : bg,
+                            selected ? selection.attrs : surface.attrs);
         yew_region_add(YEW_REGION_GP_ROW, (Rect){x0, y, w, 1U}, idx);
     }
 

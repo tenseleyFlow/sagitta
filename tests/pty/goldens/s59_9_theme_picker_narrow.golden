@@ -1,0 +1,41 @@
+# yew pty golden v1
+size 40x12 alt=1 cursor=2,9 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s59_9_theme_picke +              
+  Theme preview                         
+ :dracula                               
+ ────────────────────────────────────── 
+ >dracula                               
+                                        
+                                        
+                                        
+                                        
+                                        
+  1/10   Esc cancel | Enter/Space apply 
+ E  pty-s59_9_theme_picker_narrow.c  1:1
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCC
+DBBBBBBBBBBBBBBBEEEEEEEEEEEEEEEEEEEEEEEF
+DGEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEF
+DCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCH
+DIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIF
+DEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEF
+DEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEF
+DEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEF
+DEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEF
+DEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEF
+DJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJF
+KKKFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+--- legend
+A fg=#f8f8f2 bg=#44475a attrs=b---------
+B fg=#bd93f9 bg=#21222c attrs=b---------
+C fg=#6272a4 bg=#21222c attrs=----------
+D fg=#6272a4 bg=#282a36 attrs=----------
+E fg=#f8f8f2 bg=#21222c attrs=----------
+F fg=#f8f8f2 bg=#282a36 attrs=----------
+G fg=#bd93f9 bg=#21222c attrs=----------
+H fg=#50fa7b bg=#282a36 attrs=----------
+I fg=#bd93f9 bg=#44475a attrs=b---------
+J fg=#bfbfbf bg=#21222c attrs=----------
+K fg=#282a36 bg=#ffb86c attrs=----------

@@ -33,6 +33,79 @@ User-directed FUSS file diff detour 59.7 is implemented;
 interactive merge resolution 59.8 is in progress (parser/matching foundation
 implemented; editor actions and merge workspace not yet available).
 
+## Theme overhaul — Sprint 59.9, 2026-10-21
+
+User-directed theme detour; numbered Sprint 59 and the frozen soak remain
+unchanged. Sprint 59.8's merge workspace remains queued, not completed.
+
+- `:theme.pick` / `ed.theme.pick`, or Line-mode `t h`, opens the centered
+  shared picker. Arrows, PageUp/PageDown, wheel and filtering preview the
+  entire editor. Enter/Space/same-row click applies; Escape/repeated opener
+  cancels. Ctrl-v/Ctrl-s split-accept gestures are inert here.
+- Preview holds an owned copy of the opening compiled palette; it does not
+  change the theme option, toggle history, syntax state or document bytes.
+  Cancel restores exact tables without rereading a possibly changed/deleted
+  theme file. Apply publishes the displayed palette and updates the option
+  and appropriate dark/light history once. This is session-only; persistent
+  choices remain `set { theme: "NAME" }` in the user's init.fl.
+- Ten presets: Quiver Dark/Light plus Dracula, Nord, Gruvbox Dark/Light,
+  Catppuccin Mocha/Latte and Solarized Dark/Light. Upstream MIT notices and
+  source links travel inside the installed Fletch files. All 54 attrs are
+  explicit in every preset; all existing chrome/Git/LSP roles are mapped.
+- Input, list and group dialogs follow modal theme roles. Quiver uses
+  neutral slate/paper surfaces with blue accents instead of orange fill.
+  Selected rows have full-width highlighting and a non-color `>` marker.
+  Partial themes fall back to editor colors; ANSI shade collapse retains
+  reverse selection. No new dependency or Cell-layout change.
+- Discovery is sorted/deduplicated and capped at 256 names of 127 bytes;
+  user themes override runtime copies. Explicit runtime-directory semantics
+  are preserved. Invalid themes cannot replace a good preview; theme-named
+  FIFOs/devices are rejected without waiting for a producer.
+- Shared-picker testing exposed swallowed Backspace/edit keys. The picker
+  now delegates to the existing prompt-only editing handler, retaining
+  document isolation and ordinary file pickers' split accepts.
+
+Verification: focused Clang/GCC 16/ASan+UBSan theme tests (23 tests, 3,643
+assertions), empty-module theme tests (22 / 3,541), picker/group (44 / 1,080),
+prompt (51 / 23,106), mouse (78 / 18,112), modal routing (6 / 198), recorder
+(25 / 1,029), command registry and default-keymap checks. Bounded theme fuzz:
+300 iterations, seed 5909, plain/sanitized hash `e0401bd93adf2fd1`.
+Man/document synchronization checks and their selftests pass; host lacks
+groff so its lint is explicitly skipped. Source bans and named-command,
+render and input integrity checks pass. Reviewed the intended palette,
+selection-marker and separator changes; all 43 focused PTYs pass in normal
+comparison mode (each case runs twice): picker families including all six
+new theme variants, four group-picker chrome variants, six commit-modal
+variants, finder/buffer/undo/macro/plugin/capability dialogs, startup tabs,
+and FUSS actions/discard. Five rename PTYs and the Fletch-book recording
+case also pass with absolute helper paths and the docs fixture link.
+
+This is not a full-suite green claim. An overbroad PTY update sweep was
+stopped and unrelated output-tab/legacy AI snapshots were left unchanged.
+That sweep also reported `tutor_ch06`, which needs a separate focused
+recheck; its earlier rename/book errors were harness setup errors corrected
+above. The retained log is `build-s59_6/pty-theme-update.log`.
+
+Performance: 200x50 theme switch p99 **0.324 ms**, zero syntax line calls;
+pre-change `ffb03f4f` control **0.327 ms**, also zero calls. Thirty repeated
+picker open/preview/cancel cycles plus setup took 0.01 s wall and about
+5.1 MiB peak RSS in the focused test. The broad `perf-syn` run is NOT green:
+relative microbench timing checks tripped. Absolute-budget reruns also
+flagged `clean_list_48` and `block_multiline_100k`; the clean pre-change
+archive reproduces both (3.000 ms / 8.978 ms p99, versus 2.902 ms / 8.690 ms
+here). No performance baseline or gate was changed. Logs:
+`build-s59_6/theme-perf-budgets.log` and
+`/tmp/yew-theme-control.8Y33Yl/perf-control.log`.
+
+Adjacent cleanup: six AI streaming badge goldens still expected the old `a`
+although `ffb03f4f` already draws `✦`. Refreshed separately in `2f539ad3`;
+all 25 AI-badge PTYs pass. Theme presets/contract landed in `6f204fa5`.
+No install, push, hosted CI or new soak is implied by this local evidence.
+Dogfood with `./build-s59_6/yew ~/scratch/wolf/`, then `:theme.pick` or `t h`
+in Line mode. Default `build/` remains root-owned and was not cleaned or
+overwritten. Next feature pickup remains the unfinished Sprint 59.8 merge
+workspace, after the user's latency/theme field checks.
+
 ## Modal toggles and FUSS scroll margin — 2026-10-21
 
 Two user-requested feel changes landed while the captured-lag fix awaits

@@ -4,8 +4,20 @@ Themes are pure Fletch data. They contain no calls, imports, functions, or
 capabilities, and loading one never executes code. A theme file contains one
 map literal and normally lives at `themes/NAME.fl`.
 
-Yew ships `quiver-dark` and `quiver-light`. Both define all 54 semantic
-attributes explicitly. A user theme may be partial; its missing attributes
+Yew ships ten presets, each defining all 54 semantic attributes explicitly:
+
+| Family | Names |
+| --- | --- |
+| Quiver (default) | `quiver-dark`, `quiver-light` |
+| Dracula | `dracula` |
+| Nord | `nord` |
+| Gruvbox | `gruvbox-dark`, `gruvbox-light` |
+| Catppuccin | `catppuccin-mocha`, `catppuccin-latte` |
+| Solarized | `solarized-dark`, `solarized-light` |
+
+These are yew adaptations of the upstream palettes, with editor-specific
+role mappings and diff tints. Source links and MIT notices are retained in
+each preset. A user theme may be partial; its missing attributes
 follow the fallback chain in `.docs/syntax-def.md`, resolved once at load.
 
 ## Top-level map
@@ -149,12 +161,33 @@ cell attribute field without enlarging `Cell`.
 
 ## Discovery and switching
 
+Open `:theme.pick` (`ed.theme.pick`), or press `t h` in Line mode. The
+centered picker previews the whole editor as you move with arrows,
+PageUp/PageDown, or the mouse wheel. Type to filter; Backspace edits the
+filter. Enter, Space, or a click applies the selected preview. Escape or
+the repeated opening shortcut cancels and restores the exact original
+palette, even if its source file has since changed or disappeared.
+
+Preview does not update the `theme` option or dark/light toggle history.
+Apply updates both for **this session**, like `theme.set`; no configuration
+file is rewritten. Persist a choice in your `init.fl` with
+`set { theme: "catppuccin-mocha" }`.
+
+The list discovers user and runtime theme filename stems, deduplicates and
+sorts them, and reports if it reaches its 256-name limit (names up to 127
+bytes). Invalid files report a load error without replacing the last good
+preview. Non-regular files are rejected without waiting for input.
+
 For a requested `NAME`, yew checks these locations in order:
 
 1. `$XDG_CONFIG_HOME/yew/themes/NAME.fl` (or `~/.config/yew/themes/NAME.fl`)
 2. `$YEW_RUNTIME_DIR/themes/NAME.fl`
 3. the installed runtime directory
 4. `runtime/themes/NAME.fl` for an uninstalled source-tree run
+5. the embedded runtime image when enabled
+
+A nonempty `YEW_RUNTIME_DIR` is exclusive: no installed, source-tree or
+embedded fallback is consulted for missing themes. User themes still win.
 
 Theme names contain lowercase ASCII letters, digits, hyphens, and underscores.
 Themes are intentionally not cached to disk: they are small, pure data, and
@@ -173,6 +206,15 @@ theme unchanged when the terminal does not answer or returns a malformed
 reply. An explicit `YEW_THEME` or `--theme` still wins over automatic choice.
 
 ## Degradation ladder
+
+Input dialogs, list pickers and the tab-group picker use the same
+`modal.surface`, `modal.title`, `modal.detail`, `modal.border`, `modal.key`
+and `modal.selection` roles. Surface supplies the background; title/detail/
+border/key change ink and weight only. Selection may change both colors.
+Missing modal roles inherit the editor foreground/background, never a
+fixed orange mode chip. Quiver now uses neutral modal surfaces with blue
+accents. Other presets carry their own palette through dialogs, tabs,
+FUSS, menus, status and syntax.
 
 The ladder is decided once per frame:
 

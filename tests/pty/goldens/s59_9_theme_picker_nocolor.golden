@@ -1,0 +1,58 @@
+# yew pty golden v1
+size 100x24 alt=1 cursor=5,30 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s59_9_theme_picke + 
+    1 /* Your document stays intact. */
+    1 int main(void) {
+    2     const char *message = "Hello, yew";
+    3     return 42;   Theme preview 
+    4 }               :dracula
+    5                 ────────────────────────────────────────────────────────
+                      >dracula                                                
+
+
+
+
+
+
+
+
+
+
+                       1/10   Enter/Space/click apply | Esc cancel
+
+
+
+
+ E  pty-s59_9_theme_picker_nocolor.c                                             utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBB
+CCCCBCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+CCCCCCDDDCCCCCCDDDDCCC
+CCCCCCCCCCDDDDDCDDDDCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCBBBBBBCCCCCCBBBBBBBBBBBBBBB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+
+
+
+
+
+
+
+
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=------r---
+B fg=default bg=default attrs=b---------
+C fg=default bg=default attrs=----------
+D fg=default bg=default attrs=--i-------

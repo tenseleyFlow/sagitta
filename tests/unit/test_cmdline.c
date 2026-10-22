@@ -588,7 +588,8 @@ void test_cmdline_modal_has_one_surface_and_readable_selection(void)
                                               YEW_RENDER_TIER_16;
             ed->render.no_color = variant == 3U;
             surface = yew_theme_ui_tab(ed, "modal.surface");
-            selected = yew_theme_ui_tab(ed, "modal.selection");
+            ThemeEnt selection_style = yew_theme_modal_style(ed, "modal.selection");
+            selected = &selection_style;
             YEW_ASSERT_NOT_NULL(surface);
             YEW_ASSERT_NOT_NULL(selected);
             yew_glyph_force_ascii((variant & 1U) != 0U);

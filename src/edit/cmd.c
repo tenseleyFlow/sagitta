@@ -237,6 +237,8 @@ static const CmdDesc builtins[] = {
      "Load and select a syntax theme", NULL},
     {"ed.theme.toggle", yew_theme_cmd_toggle, YEW_ARITY_NONE, 0U,
      "Toggle between the last dark and light themes", NULL},
+    {"ed.theme.pick", yew_theme_cmd_pick, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
+     "Preview and select a theme", NULL},
     {"ed.shadow.accept_word", yew_shadow_cmd_accept_word, YEW_ARITY_NONE,
      YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Accept the next suggested unit", "shadow_word"},
@@ -1424,6 +1426,7 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.opt.set_many", "ov", YEW_RP_FORBID, "set"},
     {"ed.theme.set", "s", YEW_RP_FORBID, "theme"},
     {"ed.theme.toggle", "", YEW_RP_FORBID, NULL},
+    {"ed.theme.pick", "", YEW_RP_FORBID, NULL},
     {"ed.mark.set", "s", YEW_RP_FORBID, "mark"},
     /* :! carries an arbitrary command line, so its argspec is one string
      * and the range decides run-vs-filter (§5). */
@@ -1526,7 +1529,7 @@ static bool command_name_valid(const char *name)
         "mouse"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
-        "copy", "cut",
+        "copy", "cut", "pick",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
         "open", "close", "save", "new", "enter", "leave", "grow",
         "shrink", "expand", "contract", "list", "reload", "cancel",

@@ -10,7 +10,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
     4
               ../
           [✓] one.txt
-          [ ] three.txt
+         >[ ] three.txt                                                
           [ ] two.txt
 
 
@@ -35,7 +35,7 @@ CCCCCCCCCCDDDDDDDDDDDDDDDD
 CCCCC
 CCCCCCCCCCCCCCCCC
 CCCCCCCCCCCCCCCCCCCCC
-CCCCCCCCCAAAAAAAAAAAAAA
+CCCCCCCCCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 CCCCCCCCCCCCCCCCCCCCC
 
 

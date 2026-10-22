@@ -15,6 +15,7 @@
 #include "edit/sel_actions.h"
 #include "edit/shell.h"
 #include "edit/shsession.h"
+#include "edit/theme_cmds.h"
 #include "fl/flruntime.h"
 #include "syn/theme.h"
 #include "term/grid.h"
@@ -28,6 +29,7 @@
 #include "ui/glyphs.h"
 #include "ui/shctx.h"
 #include "ui/message.h"
+#include "ui/picker.h"
 #include "ui/statusline.h"
 #include "ui/viewport.h"
 #include "unicode/coords.h"
@@ -1382,8 +1384,11 @@ CmdStatus yew_cmdline_cmd_copy_or_cancel(CmdCtx *cx)
     return yew_sel_cmd_clip_copy(cx);
 }
 
-static bool modal_key(Ed *ed, const Key *key)
+bool yew_cmdline_input_key(Ed *ed, const Key *key)
 {
+    if (ed == NULL || key == NULL || !ed->cmdline.active ||
+        ed->cmdline.kind != YEW_PROMPT_INPUT)
+        return false;
     const char *cmd = NULL;
     bool shift = (key->mods & YEW_MOD_SHIFT) != 0U;
     bool ctrl = (key->mods & YEW_MOD_CTRL) != 0U;
@@ -1473,7 +1478,7 @@ bool yew_cmdline_key(Ed *ed, const Key *key)
     if (ed == NULL || key == NULL || !ed->cmdline.active)
         return false;
     if (ed->cmdline.modal)
-        return modal_key(ed, key);
+        return yew_cmdline_input_key(ed, key);
     if (key->ev == YEW_KEY_RELEASE)
         return true;
     /*
@@ -3854,7 +3859,7 @@ static size_t modal_help_span(const char *text, size_t at, u16 width,
 void yew_cmdline_draw_modal(Ed *ed)
 {
     CmdLine *line;
-    YewUiStyle style;
+    ThemeEnt style;
     const ThemeEnt *ent;
     Cell surface;
     Cell title;
@@ -3886,11 +3891,12 @@ void yew_cmdline_draw_modal(Ed *ed)
         return;
     line = &ed->cmdline;
     sync_from_target(line);
-    style = yew_statusline_mode_style(YEW_MODE_E);
+    style = yew_theme_modal_style(ed, "modal.surface");
     surface = (Cell){0};
     surface.w = 1U;
-    surface.fg = style.chip_fg;
-    surface.bg = style.chip_bg;
+    surface.fg = style.fg;
+    surface.bg = style.bg;
+    surface.attrs = style.attrs;
     ent = yew_theme_ui_tab(ed, "modal.surface");
     if (ent != NULL) {
         surface.fg = ent->fg;
@@ -3903,12 +3909,10 @@ void yew_cmdline_draw_modal(Ed *ed)
     key_ink = modal_ink(ed, "modal.key", surface, YEW_ATTR_BOLD);
     selected = surface;
     selected.attrs ^= YEW_ATTR_REVERSE;
-    ent = yew_theme_ui_tab(ed, "modal.selection");
-    if (ent != NULL) {
-        selected.fg = ent->fg;
-        selected.bg = ent->bg;
-        selected.attrs = ent->attrs;
-    }
+    style = yew_theme_modal_style(ed, "modal.selection");
+    selected.fg = style.fg;
+    selected.bg = style.bg;
+    selected.attrs = style.attrs;
     rows = yew_textbuf_line_count(line->buf);
     cursor_row = yew_textbuf_line_of(line->buf, line->cur.pos).v;
     width = 64U;
@@ -4222,6 +4226,16 @@ void yew_cmdline_draw(Ed *ed, Rect rect)
     line = &ed->cmdline;
     sync_from_target(line);
     style = yew_statusline_mode_style(YEW_MODE_E);
+    if (line->kind == YEW_PROMPT_INPUT && yew_picker_active(ed)) {
+        ThemeEnt surface = yew_theme_modal_style(ed, "modal.surface");
+        ThemeEnt key = yew_theme_modal_style(ed, "modal.key");
+
+        style.row_fg = surface.fg;
+        style.row_bg = surface.bg;
+        style.chip_fg = key.fg;
+        style.chip_bg = surface.bg;
+        style.attrs = surface.attrs;
+    }
     yew_grid_fill(&ed->grid, rect.y, rect.x,
                   (u16)(rect.x + rect.w), styled_blank(&style));
     prefix = line->kind == YEW_PROMPT_SEARCH_F ? '/' :

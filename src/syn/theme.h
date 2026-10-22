@@ -63,6 +63,17 @@ typedef struct Theme {
 
 void yew_theme_init(Theme *theme);
 void yew_theme_free(Theme *theme);
+/* Deep copy into an initialized destination; no file reads. */
+void yew_theme_copy(Theme *dst, const Theme *src);
+
+enum { YEW_THEME_NAMES_MAX = 256, YEW_THEME_NAME_MAX = 128 };
+typedef struct ThemeNames {
+    char names[YEW_THEME_NAMES_MAX][YEW_THEME_NAME_MAX];
+    u32 n;
+    bool truncated;
+} ThemeNames;
+/* Sorted, deduplicated names; same directory precedence as select. */
+void yew_theme_names(ThemeNames *names);
 
 /* Compile one pure-literal Fletch document.  On error, `theme` is unchanged. */
 bool yew_theme_compile(Theme *theme, const u8 *src, size_t n,

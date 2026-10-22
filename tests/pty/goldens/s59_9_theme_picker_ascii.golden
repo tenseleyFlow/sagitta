@@ -1,0 +1,74 @@
+# yew pty golden v1
+size 100x24 alt=1 cursor=5,30 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ 1 pty-s59_9_theme_picke +                                                                          
+    1 /* Your document stays intact. */                                                             
+    1 int main(void) {                                                                              
+    2     const char *message = "Hello, yew";                                                       
+    3     return 42;   Theme preview                                                                
+    4 }               :dracula                                                                      
+    5                 --------------------------------------------------------                      
+                      >dracula                                                                      
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                       1/10   Enter/Space/click apply | Esc cancel                                  
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ E  pty-s59_9_theme_picker_ascii.c                                               utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDDEDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDHHHGIIIIJHHHHJGJGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGKKKKKGHHHHGLGGGGGGGGLGMMMMMMMMMMMMJGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGNNNNNNGOOJGGBBBBBBBBBBBBBBBPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDJGGGGGGGGGGGGGGGQPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSPPPPPPPPPPPPGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+DDDDDDGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+TTTGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+--- legend
+A fg=#f8f8f2 bg=#44475a attrs=b---------
+B fg=#bd93f9 bg=#21222c attrs=b---------
+C fg=#6272a4 bg=#21222c attrs=----------
+D fg=#6272a4 bg=#282a36 attrs=----------
+E fg=#f8f8f2 bg=#282a36 attrs=b---------
+F fg=#6272a4 bg=#282a36 attrs=--i-------
+G fg=#f8f8f2 bg=#282a36 attrs=----------
+H fg=#f1fa8c bg=#282a36 attrs=--i-------
+I fg=#bd93f9 bg=#282a36 attrs=----------
+J fg=#bfbfbf bg=#282a36 attrs=----------
+K fg=#bd93f9 bg=#282a36 attrs=--i-------
+L fg=#8be9fd bg=#282a36 attrs=----------
+M fg=#50fa7b bg=#282a36 attrs=----------
+N fg=#bd93f9 bg=#282a36 attrs=b---------
+O fg=#ffb86c bg=#282a36 attrs=----------
+P fg=#f8f8f2 bg=#21222c attrs=----------
+Q fg=#bd93f9 bg=#21222c attrs=----------
+R fg=#bd93f9 bg=#44475a attrs=b---------
+S fg=#bfbfbf bg=#21222c attrs=----------
+T fg=#282a36 bg=#ffb86c attrs=----------

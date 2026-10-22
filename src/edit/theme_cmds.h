@@ -11,6 +11,9 @@ typedef struct Ed Ed;
 
 CmdStatus yew_theme_cmd_set(CmdCtx *cx);
 CmdStatus yew_theme_cmd_toggle(CmdCtx *cx);
+CmdStatus yew_theme_cmd_pick(CmdCtx *cx);
+/* Modal roles inherit the editor surface, never a fixed mode-chip color. */
+ThemeEnt yew_theme_modal_style(const Ed *ed, const char *role);
 
 /* Apply NAME and retain a concise diagnostic for option/startup callers. */
 bool yew_theme_apply(Ed *ed, const char *name, char *error, size_t cap);

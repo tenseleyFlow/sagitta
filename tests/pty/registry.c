@@ -11278,6 +11278,53 @@ static void case_s52_fuss_loading(PtyCtx *c)
     s52_finish(c);
 }
 
+static void case_s59_9_theme_picker(PtyCtx *c)
+{
+    static const u8 text[] =
+        "/* Your document stays intact. */\n"
+        "int main(void) {\n"
+        "    const char *message = \"Hello, yew\";\n"
+        "    return 42;\n"
+        "}\n";
+    char path[256];
+    YewColor original;
+
+    if (!s41_fixture(c, ".c", text, sizeof(text) - 1U, path, sizeof(path)))
+        return;
+    s41_open_fixture(c, "quiver-dark", path);
+    original = c->vt.cells[0].bg;
+    ptc_bytes(c, "th");
+    s52_wait_screen(c, "Theme preview");
+    ptc_bytes(c, "draculaz");
+    ptc_settle(c, 0);
+    ptc_keys(c, "backspace");
+    s52_wait_screen(c, "1/10");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+    ptc_keys(c, "esc");
+    s52_wait_screen_gone(c, "Theme preview", 240U);
+    ptc_check(c, memcmp(&c->vt.cells[0].bg, &original, sizeof(original)) == 0,
+              "theme cancel did not restore the original tab background");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "theme.pick");
+    s18_settle_after_keys(c, "enter");
+    s52_wait_screen(c, "Theme preview");
+    ptc_bytes(c, "catppuccin-latte");
+    s52_wait_screen(c, "1/10");
+    ptc_bytes(c, " ");
+    s52_wait_screen_gone(c, "Theme preview", 240U);
+    if (strstr(c->test->name, "nocolor") == NULL)
+        ptc_check(c, memcmp(&c->vt.cells[0].bg, &original, sizeof(original)) != 0,
+                  "Space failed to apply the previewed light theme");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "theme.toggle");
+    s18_settle_after_keys(c, "enter");
+    ptc_check(c, memcmp(&c->vt.cells[0].bg, &original, sizeof(original)) == 0,
+              "cancelled dark preview polluted toggle history");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 static void case_s52_fuss_discard_confirm(PtyCtx *c)
 {
     if (!s52_open(c, NULL))
@@ -12866,6 +12913,12 @@ const PtyCase yew_pty_cases[] = {
     C(s59_7_fuss_file_diff, modern, 24U, 100U, case_s59_7_fuss_file_diff),
     C(s59_5_fuss_commit_modal, modern, 24U, 100U,
       case_s59_5_fuss_commit_modal),
+    C(s59_9_theme_picker, modern, 24U, 100U, case_s59_9_theme_picker),
+    C(s59_9_theme_picker_colors_256, modern, 24U, 100U, case_s59_9_theme_picker),
+    C(s59_9_theme_picker_colors_16, modern, 24U, 100U, case_s59_9_theme_picker),
+    C(s59_9_theme_picker_nocolor, modern, 24U, 100U, case_s59_9_theme_picker),
+    C(s59_9_theme_picker_ascii, modern, 24U, 100U, case_s59_9_theme_picker),
+    C(s59_9_theme_picker_narrow, modern, 12U, 40U, case_s59_9_theme_picker),
     C(s59_5_fuss_commit_modal_light_theme, modern, 24U, 100U,
       case_s59_5_fuss_commit_modal),
     C(s59_5_fuss_commit_modal_colors_256, modern, 24U, 100U,

@@ -47,11 +47,20 @@ guests fall back visibly without corrupting the host state.
 ## Themes
 
 Themes map semantic attributes—comment, keyword, selection, warning, and so
-on—to terminal styles. The built-in `quiver-dark` and `quiver-light` themes
-cover the full closed attribute set. Runtime switching repaints without
+on—to terminal styles. The ten built-in themes cover the full closed
+attribute set: Quiver Dark/Light, Dracula, Nord, Gruvbox Dark/Light,
+Catppuccin Mocha/Latte and Solarized Dark/Light. Runtime switching repaints without
 rehighlighting because syntax stores meanings, not colors.
 
-`:theme NAME` selects one. `theme_auto = true` asks the terminal background
+`:theme.pick` (Line-mode `t h`) opens a live-preview modal. Arrows and the
+wheel preview; typing filters. Enter, Space or a click applies. Escape or
+the repeated opener restores the original palette. Custom themes appear
+alongside the shipped presets. Apply changes this session, not `init.fl`;
+use `set { theme: "catppuccin-mocha" }` there to persist a choice.
+
+`:theme NAME` selects one directly; `:theme.toggle` switches between the
+last applied dark/light choices (previews do not change that history).
+`theme_auto = true` asks the terminal background
 query and chooses a light or dark theme; malformed or absent replies retain
 the configured theme. Color degrades deterministically from truecolor through
 256 and 16 colors to no-color styles.
@@ -60,7 +69,9 @@ Input modals use `ui."modal.surface"` for their shared background and input
 text. `modal.title`, `modal.detail`, `modal.border`, and `modal.key` change
 foreground/attributes only, keeping that surface continuous. The separate
 `modal.selection` role supplies selected text's foreground, background and
-attributes. The built-in themes use warm orange surfaces, bold titles/key
-hints and a contrasting selection; no-color retains bold and reverse-video
+attributes. List and tab-group pickers share these roles too. The built-in
+themes use palette-matched surfaces (Quiver uses neutral slate/paper),
+accent titles/key hints and a contrasting selection. Partial user themes
+inherit the editor colors; no-color retains bold and reverse-video
 selection. Rounded borders fall back to ASCII with `YEW_ASCII=1` or when
 the configured character widths would exceed their one-cell slots.

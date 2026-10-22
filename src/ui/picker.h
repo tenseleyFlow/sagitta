@@ -129,6 +129,15 @@ typedef struct PickerSpec {
      * leaves printable keys available to `action` until `/` opens the
      * shared filter line. */
     bool filter_requires_slash;
+    /* Optional live-preview transaction. selected runs outside draw only
+     * when the visible payload changes; closed runs after teardown. It may
+     * release ctx when accept is NULL, or leave it for accept otherwise. */
+    void (*selected)(Ed *ed, void *ctx, i32 payload);
+    void (*closed)(Ed *ed, void *ctx, bool accepted);
+    bool space_accept;
+    bool no_split; /* split acceptance is swallowed, never remapped to apply */
+    u16 max_width;  /* zero keeps the standard picker dimensions */
+    u16 max_height;
     void *ctx;
 } PickerSpec;
 

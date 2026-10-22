@@ -145,6 +145,9 @@ void yew_cmdline_restore(Ed *ed, YewPromptKind kind, const char *text,
                          size_t caret, u8 return_mode);
 void yew_cmdline_dispose(Ed *ed);
 bool yew_cmdline_key(Ed *ed, const Key *key);
+/* Prompt-only editing keys for modal owners (no document fallthrough).
+ * The owner must react if cancellation closes the shared input line. */
+bool yew_cmdline_input_key(Ed *ed, const Key *key);
 void yew_cmdline_paste(Ed *ed, const u8 *bytes, size_t len);
 void yew_cmdline_draw(Ed *ed, Rect rect);
 Win *yew_cmdline_target(Ed *ed);

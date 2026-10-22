@@ -3,10 +3,13 @@
 #include "syn/theme.h"
 
 #include <errno.h>
+#include <dirent.h>
+#include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "fl/ast.h"
@@ -17,6 +20,7 @@
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/runtime_asset.h"
+#include "util/sort.h"
 #include "util/xdg.h"
 
 enum { THEME_MAX_BYTES = 1024U * 1024U, THEME_MAX_DIAGS = 64U };
@@ -829,6 +833,25 @@ bool yew_theme_compile(Theme *theme, const u8 *src, size_t n,
     return true;
 }
 
+void yew_theme_copy(Theme *dst, const Theme *src)
+{
+    Theme copy;
+    u32 i;
+
+    if (dst == NULL || src == NULL || dst == src)
+        return;
+    copy = *src;
+    copy.name = src->name == NULL ? NULL : text_dup(src->name, strlen(src->name));
+    copy.ui = src->nui == 0U ? NULL :
+              yew_xmalloc((size_t)src->nui * sizeof(*src->ui));
+    for (i = 0U; i < src->nui; i++) {
+        copy.ui[i] = src->ui[i];
+        copy.ui[i].name = text_dup(src->ui[i].name, strlen(src->ui[i].name));
+    }
+    yew_theme_free(dst);
+    *dst = copy;
+}
+
 static char *path_join3(const char *a, const char *b, const char *c)
 {
     size_t an = strlen(a);
@@ -867,8 +890,26 @@ typedef enum ThemeReadStatus {
 
 static ThemeReadStatus read_file(const char *path, Bytebuf *out)
 {
-    FILE *file = fopen(path, "rb");
+    int fd = open(path, O_RDONLY | O_NONBLOCK);
+    struct stat st;
+    FILE *file = NULL;
     u8 chunk[4096];
+
+    /* Preview must never wait for a writer on a theme-named FIFO. */
+    if (fd >= 0 && (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode))) {
+        (void)close(fd);
+        errno = EINVAL;
+        return THEME_READ_IO;
+    }
+    if (fd >= 0)
+        file = fdopen(fd, "rb");
+    if (fd >= 0 && file == NULL) {
+        int error = errno;
+
+        (void)close(fd);
+        errno = error;
+        return THEME_READ_IO;
+    }
 
     bytebuf_init(out);
     if (file == NULL) {
@@ -1018,6 +1059,92 @@ bool yew_theme_select(Theme *theme, const char *name,
         yew_theme_free(&candidate);
     }
     return ok;
+}
+
+static void names_add(ThemeNames *out, const char *file)
+{
+    char name[YEW_THEME_NAME_MAX];
+    size_t n = strlen(file);
+    u32 i;
+    u32 at;
+
+    if (n <= 3U || n - 3U >= sizeof(name) || strcmp(file + n - 3U, ".fl") != 0)
+        return;
+    (void)memcpy(name, file, n - 3U);
+    name[n - 3U] = '\0';
+    if (!valid_name(name))
+        return;
+    for (i = 0U; i < out->n; i++) {
+        if (strcmp(name, out->names[i]) == 0)
+            return;
+    }
+    /* Keep the lexical first N even when readdir order differs. */
+    at = out->n;
+    if (at == YEW_THEME_NAMES_MAX) {
+        out->truncated = true;
+        at = 0U;
+        for (i = 1U; i < out->n; i++) {
+            if (strcmp(out->names[i], out->names[at]) > 0)
+                at = i;
+        }
+        if (strcmp(name, out->names[at]) >= 0)
+            return;
+    } else {
+        out->n++;
+    }
+    (void)memcpy(out->names[at], name, n - 2U);
+}
+
+static void names_dir(ThemeNames *out, const char *root)
+{
+    char *path;
+    DIR *dir;
+    struct dirent *entry;
+
+    if (root == NULL || root[0] == '\0')
+        return;
+    path = path_join3(root, "themes", "");
+    dir = path == NULL ? NULL : opendir(path);
+    yew_xfree(path);
+    if (dir == NULL)
+        return;
+    while ((entry = readdir(dir)) != NULL)
+        names_add(out, entry->d_name);
+    (void)closedir(dir);
+}
+
+static int names_cmp(const void *a, const void *b, void *ctx)
+{
+    (void)ctx;
+    return strcmp(a, b);
+}
+
+void yew_theme_names(ThemeNames *names)
+{
+    char *config;
+    const char *env = getenv("YEW_RUNTIME_DIR");
+    size_t i;
+
+    if (names == NULL)
+        return;
+    (void)memset(names, 0, sizeof(*names));
+    config = yew_xdg_config_dir();
+    names_dir(names, config);
+    yew_xfree(config);
+    if (env != NULL && env[0] != '\0') {
+        names_dir(names, env);
+    } else {
+        names_dir(names, yew_runtime_prefix_dir());
+        names_dir(names, "runtime");
+        for (i = 0U; i < yew_runtime_asset_count(); i++) {
+            const char *name = yew_runtime_asset_name(i);
+
+            if (name != NULL && strncmp(name, "themes/", 7U) == 0)
+                names_add(names, name + 7U);
+        }
+    }
+    yew_sort_stable(names->names, names->n, sizeof(names->names[0]),
+                     names_cmp, NULL);
 }
 
 const ThemeEnt *yew_theme_table(const Theme *theme,

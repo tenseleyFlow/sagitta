@@ -11,10 +11,12 @@
 #include <time.h>
 
 #include "edit/ed.h"
+#include "edit/theme_cmds.h"
 #include "fl/flruntime.h"
 #include "term/grid.h"
 #include "ui/cmdline.h"
 #include "ui/filter.h"
+#include "ui/glyphs.h"
 #include "ui/message.h"
 #include "ui/region.h"
 #include "unicode/width.h"
@@ -75,6 +77,8 @@ typedef struct PickerState {
      */
     i32 sel_payload;
     bool has_sel;
+    bool notified;
+    i32 notified_payload;
     u32 scroll;
     /*
      * The picker OWNS the command line.
@@ -95,6 +99,23 @@ typedef struct PickerState {
 } PickerState;
 
 static PickerState pk;
+
+static void notify_selection(Ed *ed)
+{
+    i32 payload;
+
+    if (!pk.active || !pk.has_sel || pk.n_ranked == 0U) {
+        pk.notified = false;
+        return;
+    }
+    payload = yew_picker_selected(ed);
+    if (pk.notified && payload == pk.notified_payload)
+        return;
+    pk.notified = true;
+    pk.notified_payload = payload;
+    if (pk.spec.selected != NULL)
+        pk.spec.selected(ed, pk.spec.ctx, payload);
+}
 
 bool yew_picker_active(const Ed *ed)
 {
@@ -489,6 +510,7 @@ void yew_picker_refilter(Ed *ed)
         if (!pk.has_sel)
             sel_set_row(0U);
         pk.scroll = 0U;
+        notify_selection(ed);
         return;
     }
     /*
@@ -517,6 +539,7 @@ void yew_picker_refilter(Ed *ed)
     if (!pk.has_sel)
         sel_set_row(0U);
     pk.scroll = 0U;
+    notify_selection(ed);
 }
 
 /*
@@ -557,6 +580,7 @@ bool yew_picker_tick(Ed *ed)
         if (!pk.has_sel)
             sel_set_row(0U);
         ed->full_damage = true;
+        notify_selection(ed);
         return pk.scanning;
     }
     pk.scanning = yew_filter_step(&pk.filter_state, items,
@@ -565,6 +589,7 @@ bool yew_picker_tick(Ed *ed)
     if (!pk.has_sel)
         sel_set_row(0U);
     ed->full_damage = true;
+    notify_selection(ed);
     return pk.scanning;
 }
 
@@ -620,8 +645,11 @@ void yew_picker_open(Ed *ed, const PickerSpec *s)
 
 void yew_picker_close(Ed *ed, bool accepted)
 {
+    PickerSpec spec;
+
     if (!pk.active)
         return;
+    spec = pk.spec;
     pk.active = false;
     if (ed != NULL) {
         if (ed->cmdline.active)
@@ -634,6 +662,8 @@ void yew_picker_close(Ed *ed, bool accepted)
     pk.filter_open = false;
     yew_filter_free(&pk.filter_state);
     bytebuf_free(&pk.text);
+    if (spec.closed != NULL)
+        spec.closed(ed, spec.ctx, accepted);
 }
 
 /* ---------------------------------------------------------------- */
@@ -663,6 +693,9 @@ static void move_by(i32 delta)
 static bool accept_selected(Ed *ed, u8 how)
 {
     i32 payload = yew_picker_selected(ed);
+
+    if (pk.spec.no_split && how != YEW_PICK_ACCEPT_HERE)
+        return true;
 
     /*
      * Returns TRUE either way: an empty list has nothing to accept, but
@@ -726,6 +759,7 @@ void yew_picker_select_payload(Ed *ed, i32 payload)
     pk.sel_payload = payload;
     pk.has_sel = true;
     ed->full_damage = true;
+    notify_selection(ed);
 }
 
 bool yew_picker_accept(Ed *ed)
@@ -773,6 +807,7 @@ void yew_picker_scroll(Ed *ed, i32 rows)
         return;
     move_by(rows);
     ed->full_damage = true;
+    notify_selection(ed);
 }
 
 bool yew_picker_key(Ed *ed, const Key *k)
@@ -781,6 +816,12 @@ bool yew_picker_key(Ed *ed, const Key *k)
 
     if (!pk.active || ed == NULL || k == NULL)
         return false;
+    if (k->ev == YEW_KEY_RELEASE)
+        return true;
+    if (pk.spec.space_accept && k->code == (u32)' ' &&
+        (k->mods & (YEW_MOD_CTRL | YEW_MOD_ALT | YEW_MOD_SUPER |
+                    YEW_MOD_HYPER | YEW_MOD_META)) == 0U)
+        return accept_selected(ed, YEW_PICK_ACCEPT_HERE);
     page = list_rows();
     if (page == 0U)
         page = 1U;
@@ -793,26 +834,32 @@ bool yew_picker_key(Ed *ed, const Key *k)
     case YEW_KEY_UP:
         move_by(-1);
         ed->full_damage = true;
+        notify_selection(ed);
         return true;
     case YEW_KEY_DOWN:
         move_by(1);
         ed->full_damage = true;
+        notify_selection(ed);
         return true;
     case YEW_KEY_PAGE_UP:
         move_by(-(i32)page);
         ed->full_damage = true;
+        notify_selection(ed);
         return true;
     case YEW_KEY_PAGE_DOWN:
         move_by((i32)page);
         ed->full_damage = true;
+        notify_selection(ed);
         return true;
     case YEW_KEY_HOME:
         sel_set_row(0U);
         ed->full_damage = true;
+        notify_selection(ed);
         return true;
     case YEW_KEY_END:
         sel_set_row(pk.n_ranked == 0U ? 0U : pk.n_ranked - 1U);
         ed->full_damage = true;
+        notify_selection(ed);
         return true;
     default:
         break;
@@ -839,11 +886,13 @@ bool yew_picker_key(Ed *ed, const Key *k)
         case (u32)'N':
             move_by(1);
             ed->full_damage = true;
+            notify_selection(ed);
             return true;
         case (u32)'p':
         case (u32)'P':
             move_by(-1);
             ed->full_damage = true;
+            notify_selection(ed);
             return true;
         case (u32)'v':
         case (u32)'V':
@@ -872,7 +921,15 @@ bool yew_picker_key(Ed *ed, const Key *k)
          */
         bytebuf_init(&before);
         bytebuf_append(&before, pk.text.data, (size_t)pk.text.len);
-        (void)yew_cmdline_key(ed, k);
+        /* The text-only hook returns false for Backspace/Left/Ctrl-u.
+         * Those must edit the shared prompt too, never be swallowed or
+         * dispatched into the document behind the picker. */
+        (void)yew_cmdline_input_key(ed, k);
+        if (!ed->cmdline.active) {
+            bytebuf_free(&before);
+            yew_picker_close(ed, false);
+            return true;
+        }
         pk.text.len = 0U;
         yew_cmdline_text(ed, &pk.text);
         changed = before.len != pk.text.len ||
@@ -893,12 +950,13 @@ bool yew_picker_key(Ed *ed, const Key *k)
 /* ---------------------------------------------------------------- */
 
 static void draw_row(Ed *ed, u16 y, u16 x0, u16 w, const PickItem *it,
-                     const FzMatch *m, bool selected)
+                     const FzMatch *m, bool selected, ThemeEnt style,
+                     ThemeEnt detail, ThemeEnt key)
 {
-    YewColor fg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-    YewColor accent = {YEW_COLOR_RGB, 120U, 180U, 255U};
-    YewColor dim = {YEW_COLOR_RGB, 120U, 120U, 120U};
+    YewColor fg = style.fg;
+    YewColor bg = style.bg;
+    YewColor accent = key.fg;
+    YewColor dim = selected ? fg : detail.fg;
     u16 label_w = w > 2U ? (u16)(w - 2U) : 0U;
     size_t fit;
     int cells = 0;
@@ -907,6 +965,18 @@ static void draw_row(Ed *ed, u16 y, u16 x0, u16 w, const PickItem *it,
 
     if (label_w == 0U)
         return;
+    {
+        Cell blank = {0};
+
+        blank.w = 1U;
+        blank.fg = fg;
+        blank.bg = bg;
+        blank.attrs = style.attrs;
+        yew_grid_fill(&ed->grid, y, x0, (u16)(x0 + w), blank);
+        if (selected)
+            (void)yew_grid_puts(&ed->grid, y, x0, (const u8 *)">", 1U,
+                               fg, bg, style.attrs);
+    }
     /*
      * The detail column is dropped under 40 cells: two columns in a
      * narrow box means neither is readable.
@@ -921,7 +991,7 @@ static void draw_row(Ed *ed, u16 y, u16 x0, u16 w, const PickItem *it,
             u16 dx = (u16)(x0 + w - 1U - (u16)dcells);
 
             (void)yew_grid_puts(&ed->grid, y, dx, (const u8 *)it->detail,
-                                dfit, dim, bg, YEW_ATTR_DIM);
+                                dfit, dim, bg, style.attrs);
             label_w = (u16)(dx - x0 - 2U);
         }
     }
@@ -931,7 +1001,7 @@ static void draw_row(Ed *ed, u16 y, u16 x0, u16 w, const PickItem *it,
                        (int)label_w, &cells);
     at = (u16)(x0 + 1U);
     (void)yew_grid_puts(&ed->grid, y, at, (const u8 *)it->label, fit, fg,
-                        bg, selected ? YEW_ATTR_REVERSE : 0U);
+                        bg, style.attrs);
     /*
      * Matched bytes in the accent style, drawn OVER the label.  The
      * positions are byte offsets from the scorer, so each is re-clipped
@@ -962,9 +1032,14 @@ static void draw_row(Ed *ed, u16 y, u16 x0, u16 w, const PickItem *it,
 
 void yew_picker_draw(Ed *ed, Rect area)
 {
-    YewColor fg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-    YewColor dim = {YEW_COLOR_RGB, 120U, 120U, 120U};
+    ThemeEnt surface = yew_theme_modal_style(ed, "modal.surface");
+    ThemeEnt title = yew_theme_modal_style(ed, "modal.title");
+    ThemeEnt detail = yew_theme_modal_style(ed, "modal.detail");
+    ThemeEnt selection = yew_theme_modal_style(ed, "modal.selection");
+    ThemeEnt key = yew_theme_modal_style(ed, "modal.key");
+    YewColor fg = title.fg;
+    YewColor bg = surface.bg;
+    YewColor dim = detail.fg;
     const PickItem *items;
     u32 n = 0U;
     u16 w;
@@ -982,6 +1057,8 @@ void yew_picker_draw(Ed *ed, Rect area)
         return;
     max_w = pk.spec.preview == NULL ? (u16)YEW_PICKER_MAX_W
                                      : (u16)YEW_PICKER_PREVIEW_MAX_W;
+    if (pk.spec.max_width >= YEW_PICKER_MIN_COLS)
+        max_w = pk.spec.max_width;
     w = area.w < max_w ? area.w : max_w;
     if (area.w > 2U) {
         if (w > area.w - 2U)
@@ -990,6 +1067,8 @@ void yew_picker_draw(Ed *ed, Rect area)
         w = area.w;
     }
     h = area.h < (u16)YEW_PICKER_MAX_H ? area.h : (u16)YEW_PICKER_MAX_H;
+    if (pk.spec.max_height >= YEW_PICKER_MIN_ROWS && h > pk.spec.max_height)
+        h = pk.spec.max_height;
     if (area.h > 2U) {
         if (h > area.h - 2U)
             h = (u16)(area.h - 2U);
@@ -1005,6 +1084,10 @@ void yew_picker_draw(Ed *ed, Rect area)
         Cell blank;
 
         (void)memset(&blank, 0, sizeof(blank));
+        blank.w = 1U;
+        blank.fg = surface.fg;
+        blank.bg = surface.bg;
+        blank.attrs = surface.attrs;
         for (i = 0U; i < h; i++)
             yew_grid_fill(&ed->grid, (u16)(y0 + i), x0, (u16)(x0 + w),
                           blank);
@@ -1015,8 +1098,22 @@ void yew_picker_draw(Ed *ed, Rect area)
 
     (void)snprintf(line, sizeof(line), " %s ",
                    pk.spec.title == NULL ? "Pick" : pk.spec.title);
-    (void)yew_grid_puts(&ed->grid, y0, x0, (const u8 *)line, strlen(line),
-                        fg, bg, YEW_ATTR_BOLD);
+    {
+        int cells;
+        size_t fit = yew_str_clip((const u8 *)line, strlen(line), w, &cells);
+
+        (void)yew_grid_puts(&ed->grid, y0, x0, (const u8 *)line, fit,
+                           fg, bg, title.attrs);
+    }
+    if (h > 2U) {
+        ThemeEnt border = yew_theme_modal_style(ed, "modal.border");
+
+        for (i = 0U; i < w; i++)
+            (void)yew_grid_puts(&ed->grid, (u16)(y0 + 2U), (u16)(x0 + i),
+                               (const u8 *)yew_glyph(YEW_GLYPH_BORDER_H),
+                               yew_glyph_len(YEW_GLYPH_BORDER_H), border.fg,
+                               bg, border.attrs);
+    }
 
     /* The filter line draws itself — it is the s18 widget. */
     if (pk.filter_open && ed->cmdline.active)
@@ -1053,7 +1150,8 @@ void yew_picker_draw(Ed *ed, Rect area)
         if (pk.ranked[idx].idx >= n)
             continue;
         draw_row(ed, y, x0, row_width, &items[pk.ranked[idx].idx],
-                 &pk.ranked[idx].m, idx == cur);
+                 &pk.ranked[idx].m, idx == cur,
+                 idx == cur ? selection : surface, detail, key);
         /*
          * The region payload is the item's PAYLOAD, not the row — the
          * same law the selection follows, so Sprint 27's click lands on
@@ -1071,11 +1169,16 @@ void yew_picker_draw(Ed *ed, Rect area)
      * stays honest rather than showing a number that will change.
      */
     if (pk.spec.footer != NULL) {
+        const char *footer = pk.spec.footer;
+
+        if (pk.spec.space_accept && w < 50U)
+            footer = w < 34U ? "Esc cancel | Enter apply" :
+                                "Esc cancel | Enter/Space apply";
         (void)snprintf(line, sizeof(line), " %u/%u%s   %s",
                        (unsigned)yew_picker_shown(ed),
                        (unsigned)pk.total,
                        pk.scanning ? " scanning..." : "",
-                       pk.spec.footer);
+                       footer);
     } else {
         (void)snprintf(line, sizeof(line),
                        " %u/%u%s   up/down move . enter open . ^v split . esc",
@@ -1083,9 +1186,13 @@ void yew_picker_draw(Ed *ed, Rect area)
                        (unsigned)pk.total,
                        pk.scanning ? " scanning..." : "");
     }
-    (void)yew_grid_puts(&ed->grid, (u16)(y0 + h - 1U), x0,
-                        (const u8 *)line, strlen(line), dim, bg,
-                        YEW_ATTR_DIM);
+    {
+        int cells;
+        size_t fit = yew_str_clip((const u8 *)line, strlen(line), w, &cells);
+
+        (void)yew_grid_puts(&ed->grid, (u16)(y0 + h - 1U), x0,
+                           (const u8 *)line, fit, dim, bg, detail.attrs);
+    }
 
     /*
      * The preview is a SLOT BESIDE the list, never over it.

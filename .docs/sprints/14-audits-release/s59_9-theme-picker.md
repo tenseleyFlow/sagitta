@@ -93,12 +93,31 @@ applying changes this session; persistent choices remain in init.fl.
 
 ## Definition of Done
 
-- [ ] Ten shipped palettes load with all 54 attrs and no diagnostics.
-- [ ] Picker discovers shipped and custom names deterministically.
-- [ ] Arrows/wheel/filter preview; Enter/Space/same-row click apply.
-- [ ] Escape/repeated opener/replacement restore exact original tables.
-- [ ] Preview never mutates options, toggle history, or document bytes.
-- [ ] Failed/empty choices cannot commit an unrelated preview or split.
-- [ ] Input, list and group modals follow the active palette.
-- [ ] Focused unit/PTY/compiler/sanitizer checks and timings recorded.
-- [ ] Docs identify session-only selection and persistent init.fl setting.
+- [x] Ten shipped palettes load with all 54 attrs and no diagnostics.
+- [x] Picker discovers shipped and custom names deterministically.
+- [x] Arrows/wheel/filter preview; Enter/Space/same-row click apply.
+- [x] Escape/repeated opener/replacement restore exact original tables.
+- [x] Preview never mutates options, toggle history, or document bytes.
+- [x] Failed/empty choices cannot commit an unrelated preview or split.
+- [x] Input, list and group modals follow the active palette.
+- [x] Focused unit/PTY/compiler/sanitizer checks and timings recorded.
+- [x] Docs identify session-only selection and persistent init.fl setting.
+
+## Completion evidence — 2026-10-21
+
+Warning-clean Clang/GCC 16 and ASan/UBSan builds: theme units 23 tests /
+3,643 assertions; empty-module theme units 22 / 3,541. Focused picker/group,
+prompt, mouse, modal routing, recorder, registry and default-keymap suites
+pass. All 43 focused PTYs pass their normal two-run comparison, including
+six new theme variants and dark/light/ANSI/ASCII/monochrome commit dialogs.
+Man/docs synchronization checks and selftests pass (groff unavailable).
+Bounded plain/sanitized theme fuzz: 300 iterations, seed 5909, matching hash
+`e0401bd93adf2fd1`.
+
+Theme switching at 200x50: p99 0.324 ms, zero syntax calls, versus 0.327 ms
+in clean pre-change `ffb03f4f`. Thirty picker open/preview/cancel cycles plus
+setup: 0.01 s wall, about 5.1 MiB peak RSS. Broader syntax performance gates
+are not green: the two absolute-budget misses reproduce in the pre-change
+control, and no gate was relaxed. The incomplete broad PTY run also is not
+a full-regression signoff. `.docs/HANDOFF.md` records exact scope, remaining
+unrelated checks and log paths. No push, install or new soak was performed.
