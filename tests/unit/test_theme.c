@@ -68,7 +68,11 @@ static char *theme_read(const char *path, size_t *len)
 void test_theme_defaults_compile_with_full_attr_coverage(void)
 {
     static const char *const paths[] = {
-        "runtime/themes/quiver-dark.fl", "runtime/themes/quiver-light.fl"
+        "runtime/themes/quiver-dark.fl", "runtime/themes/quiver-light.fl",
+        "runtime/themes/dracula.fl", "runtime/themes/nord.fl",
+        "runtime/themes/gruvbox-dark.fl", "runtime/themes/gruvbox-light.fl",
+        "runtime/themes/catppuccin-mocha.fl", "runtime/themes/catppuccin-latte.fl",
+        "runtime/themes/solarized-dark.fl", "runtime/themes/solarized-light.fl"
     };
     static const char *const ui_roles[] = {
         "lsp.hover_range", "lsp.highlight_read", "lsp.highlight_write",
@@ -99,10 +103,15 @@ void test_theme_defaults_compile_with_full_attr_coverage(void)
         YEW_ASSERT(yew_theme_compile(&theme, (const u8 *)src, len,
                                      paths[file], &f.dc));
         YEW_ASSERT_EQ_U64(f.ndiag, 0U);
-        YEW_ASSERT_EQ_STR(yew_theme_name(&theme),
-                          file == 0U ? "quiver-dark" : "quiver-light");
+        YEW_ASSERT_EQ_U64(strlen(yew_theme_name(&theme)),
+                          strlen(paths[file]) - strlen("runtime/themes/") - 3U);
+        YEW_ASSERT_EQ_MEM(yew_theme_name(&theme),
+                          paths[file] + strlen("runtime/themes/"),
+                          strlen(yew_theme_name(&theme)));
         YEW_ASSERT_EQ_U64(yew_theme_kind(&theme),
-                          file == 0U ? YEW_THEME_DARK : YEW_THEME_LIGHT);
+                          strstr(paths[file], "light") != NULL ||
+                          strstr(paths[file], "latte") != NULL ?
+                              YEW_THEME_LIGHT : YEW_THEME_DARK);
         for (attr = 0U; attr < YEW_ATTR__COUNT; attr++)
             YEW_ASSERT(yew_theme_attr_explicit(&theme, (SynAttr)attr));
         for (attr = 0U; attr < YEW_ARRAY_LEN(ui_roles); attr++)
