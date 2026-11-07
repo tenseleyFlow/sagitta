@@ -6612,6 +6612,61 @@ static void case_s26_finder_chrome_wide(PtyCtx *c)
     s26_fixture_remove();
 }
 
+/* The cell at row, col holds exactly the glyph `want`. */
+static bool s26_cell_is(const VtScreen *vt, int row, int col,
+                        const char *want)
+{
+    const VtCell *cell;
+    const u8 *glyph;
+    size_t n;
+
+    if (row < 0 || row >= vt->rows || col < 0 || col >= vt->cols)
+        return false;
+    cell = &vt->cells[(size_t)row * (size_t)vt->cols + (size_t)col];
+    glyph = vt_cell_bytes(vt, cell, &n);
+    return n == strlen(want) && memcmp(glyph, want, n) == 0;
+}
+
+/*
+ * The frame the filter key `c` produced: the filter line reads `:c`
+ * with the cursor just past it, the sliced rescan has finished (the
+ * footer counts 5/5 with no ` scanning...`), and the CJK row draws its
+ * match highlight, the `c` after `日本語.` styled apart from the `.`.
+ */
+static bool s26_cjk_filtered(const PtyCtx *c, const void *arg)
+{
+    const VtScreen *vt = &c->vt;
+    int row;
+
+    (void)arg;
+    if (!vt->cur_vis || !s26_cell_is(vt, vt->cur_r, vt->cur_c - 2, ":") ||
+        !s26_cell_is(vt, vt->cur_r, vt->cur_c - 1, "c") ||
+        !s57_screen_contains(c, "5/5   up/down move"))
+        return false;
+    for (row = 0; row < vt->rows; row++) {
+        int col;
+
+        for (col = 0; col + 7 < vt->cols; col++) {
+            const VtCell *dot;
+            const VtCell *match;
+
+            if (!s26_cell_is(vt, row, col, "\xe6\x97\xa5") ||
+                !s26_cell_is(vt, row, col + 2, "\xe6\x9c\xac") ||
+                !s26_cell_is(vt, row, col + 4, "\xe8\xaa\x9e") ||
+                !s26_cell_is(vt, row, col + 6, ".") ||
+                !s26_cell_is(vt, row, col + 7, "c"))
+                continue;
+            dot = &vt->cells[(size_t)row * (size_t)vt->cols +
+                             (size_t)col + 6U];
+            match = dot + 1;
+            return memcmp(&dot->fg, &match->fg, sizeof(dot->fg)) != 0 ||
+                   memcmp(&dot->bg, &match->bg, sizeof(dot->bg)) != 0 ||
+                   dot->attrs != match->attrs;
+        }
+    }
+    return false;
+}
+
 /*
  * Match highlighting on a CJK path.
  *
@@ -6641,13 +6696,20 @@ static void case_s26_finder_cjk_highlight(PtyCtx *c)
     /*
      * `c` matches every row; the CJK one exercises the width path.
      *
-     * Settled on QUIET rather than on a synchronized frame: a filter
-     * keystroke repaints the list but is not guaranteed to close a sync
-     * pair, and waiting for one times the case out with no clue which
-     * key was responsible.
+     * Waited for by what the key's frame CONTAINS, not by a sync pair
+     * or by quiet.  A filter keystroke repaints the list but is not
+     * guaranteed to close a sync pair, and waiting for one times the
+     * case out with no clue which key was responsible.  Quiet is no
+     * frame either: an 80 ms settle here let a loaded runner snapshot
+     * the grid from before `c` (cursor 3,2 against 3,3) whenever the
+     * editor was held off the CPU for longer than the window, and the
+     * runner's two executions disagreed.  The predicate runs at frame
+     * boundaries, and its failure names the key.
      */
     ptc_bytes(c, "c");
-    ptc_settle(c, 80);
+    ptc_wait_until(c, s26_cjk_filtered, NULL,
+                   "Sprint 26 finder never drew the frame for filter key "
+                   "`c`");
     ptc_snapshot(c, "s26_finder_cjk_highlight");
     s18_settle_after_keys(c, "esc");
     force_quit(c);
